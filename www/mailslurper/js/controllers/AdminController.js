@@ -34,11 +34,22 @@ require(
 		ThemeService.applySavedTheme();
 
 		var checkVersion = function() {
-			if (currentMailSlurperVersion !== thisMailSlurperVersion) {
-				$("#yourVersion").html(thisMailSlurperVersion);
-				$("#currentVersion").html(currentMailSlurperVersion);
-				$("#versionMessage").removeClass("hidden");
-			}
+			var thisMailSlurperVersion = "";
+			var currentMailSlurperVersion = "";
+
+			VersionService.getServerVersion().then(function(data) {
+				thisMailSlurperVersion = data.version;
+
+				VersionService.getVersionFromGithub(serviceURL).then(function(data) {
+					currentMailSlurperVersion = data.version;
+
+					if (currentMailSlurperVersion !== thisMailSlurperVersion) {
+						$("#yourVersion").html(thisMailSlurperVersion);
+						$("#currentVersion").html(currentMailSlurperVersion);
+						$("#versionMessage").removeClass("hidden");
+					}
+				});
+			});
 		};
 
 		var getSettingsFromForm = function() {
@@ -135,16 +146,6 @@ require(
 		var serviceURL = settingsService.getServiceURL();
 		var pruneOptions = [];
 		var currentTheme = "";
-		var thisMailSlurperVersion = "";
-		var currentMailSlurperVersion = "";
-
-		VersionService.getServerVersion().then(function(data) {
-			thisMailSlurperVersion = data.version;
-		});
-
-		VersionService.getVersionFromGithub(serviceURL).then(function(data) {
-			currentMailSlurperVersion = data.version;
-		});
 
 		SeedService.getPruneOptions(serviceURL).then(
 			function(response) {
