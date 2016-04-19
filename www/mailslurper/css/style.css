@@ -69,6 +69,8 @@
 	cursor: pointer;
 }
 
+#showSearchFilters { padding: 8px 12px 8px 12px; }
+
 /*
  * Bootstrap
  */
