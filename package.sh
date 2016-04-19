@@ -81,7 +81,7 @@ cp -R ./scripts ./deploy
 
 # OSX
 if [ $TARGET = "osx" ]; then
-	env GOOS=darwin GOARCH=amd64 go build
+	env GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w"
 	mv ./mailslurper ./deploy
 
 	cd deploy
@@ -93,7 +93,7 @@ fi
 
 # Linux
 if [ $TARGET = "linux" ]; then
-	env GOOS=linux GOARCH=amd64 go build
+	env GOOS=linux GOARCH=amd64 go build -ldflags="-s -w"
 	mv ./mailslurper ./deploy
 
 	cd deploy
@@ -105,7 +105,7 @@ fi
 
 # Windows
 if [ $TARGET = "windows" ]; then
-	env GOOS=windows GOARCH=amd64 go build
+	env GOOS=windows GOARCH=amd64 go build -ldflags="-s -w"
 	mv ./mailslurper.exe ./deploy
 
 	cd deploy
