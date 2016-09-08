@@ -10,14 +10,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/adampresley/webframework/console"
 	"github.com/adampresley/webframework/logging"
-	"github.com/mailslurper/libmailslurper/configuration"
-	"github.com/mailslurper/libmailslurper/server"
 	"github.com/mailslurper/mailslurper"
-	"github.com/mailslurper/mailslurper/cmd/mailslurper/global"
 	"github.com/skratchdot/open-golang/open"
 )
 
@@ -34,6 +33,7 @@ const (
 var config *mailslurper.Configuration
 var database mailslurper.IStorage
 var log *logging.Logger
+var serviceTierConfig *mailslurper.ServiceTierConfiguration
 
 func main() {
 	var err error
@@ -100,21 +100,7 @@ func main() {
 	/*
 	 * Setup and start the HTTP listener for the application site
 	 */
-	adminMux := http.NewServeMux()
-
-	adminMux.Handle("/www/", http.StripPrefix("/www/", http.FileServer(http.Dir("./www/"))))
-	adminMux.Handle("/", baseMiddleware(http.HandlerFunc(index)))
-	adminMux.Handle("/admin", baseMiddleware(http.HandlerFunc(admin)))
-	adminMux.Handle("/savedsearches", baseMiddleware(http.HandlerFunc(manageSavedSearches)))
-	adminMux.Handle("/servicesettings", baseMiddleware(http.HandlerFunc(getServiceSettings)))
-	adminMux.Handle("/version", baseMiddleware(http.HandlerFunc(getVersion)))
-
-	go func() {
-		if err := http.ListenAndServe(config.GetFullWWWBindingAddress(), adminMux); err != nil {
-			log.Fatalf("Error starting HTTP admin listener: %s", err.Error())
-			os.Exit(-1)
-		}
-	}()
+	setupAndStartAdminMux()
 
 	if config.AutoStartBrowser {
 		startBrowser(config)
@@ -123,23 +109,7 @@ func main() {
 	/*
 	 * Start the services server
 	 */
-	serviceTierConfiguration := &mailslurper.ServiceTierConfiguration{
-		Address:  config.ServiceAddress,
-		Port:     config.ServicePort,
-		Database: global.Database,
-		CertFile: config.CertFile,
-		KeyFile:  config.KeyFile,
-	}
-
-	serviceMux := http.NewServeMux()
-
-	serviceMux.Handle("/version", baseMiddleware(http.HandlerFunc(version)))
-	serviceMux.Handle("/mail", baseMiddleware(http.HandlerFunc(mailEndpoint)))
-
-	if err = mailslurper.StartServiceTier(serviceTierConfiguration); err != nil {
-		log.Printf("MailSlurper: ERROR - Error starting MailSlurper services server: %s\n", err.Error())
-		os.Exit(1)
-	}
+	setupAndStartServiceTierMux()
 }
 
 func startBrowser(config *configuration.Configuration) {
@@ -152,4 +122,93 @@ func startBrowser(config *configuration.Configuration) {
 			log.Printf("ERROR - Could not open browser - %s\n", err.Error())
 		}
 	}()
+}
+
+func isVerb(request *http.Request, expectedVerb string) bool {
+	return strings.ToLower(request.Method) == strings.ToLower(expectedVerb)
+}
+
+func splitPath(request *http.Request) []string {
+	result := strings.Split(request.URL.Path, "/")
+
+	if len(result) > 1 {
+		result = result[1:]
+	}
+
+	return result
+}
+
+func parsePath(request *http.Request, pattern string) map[string]string {
+	p := regexp.Compile("\\{(.*)\\}")
+	splitPath := splitPath(request)
+	splitPattern := strings.Split(pattern, "/")
+	result := make(map[string]string)
+	var key string
+
+	if len(splitPattern) > 1 {
+		splitPattern = splitPattern[1:]
+	}
+
+	for index, value := range splitPath {
+		if strings.HasPrefix(splitPattern[index], "{") {
+			key = p.ReplaceAllString(, "$1")
+		} else {
+			key = splitPattern[index]
+		}
+
+		result[key] = value
+	}
+
+	return result
+}
+
+func renderMainLayout(writer http.ResponseWriter, request *http.Request, htmlFileName string, data mailslurper.Page) error {
+	var layout string
+	var err error
+	var tmpl *template.Template
+	var pageString string
+
+	writer.Header().Set("Content-Type", "text/html; charset=UTF-8")
+
+	/*
+	 * Pre-load layout information
+	 */
+	if DEBUG_ASSETS {
+		var bytes []byte
+
+		if bytes, err = ioutil.ReadFile("./www/mailslurper/layouts/mainLayout.html"); err != nil {
+			log.Errorf("Error setting up layout: %s", err.Error())
+			os.Exit(-1)
+		}
+
+		layout = string(bytes)
+	} else {
+		if layout, err = www.FSString(false, "/www/mailslurper/layouts/mainLayout.html"); err != nil {
+			log.Infof("Error setting up layout: %s", err.Error())
+			os.Exit(-1)
+		}
+	}
+
+	if tmpl, err = template.New("layout").Parse(layout); err != nil {
+		return err
+	}
+
+	if pageString, err = getHTMLPageString(htmlFileName); err != nil {
+		return err
+	}
+
+	if tmpl, err = tmpl.Parse(pageString); err != nil {
+		return err
+	}
+
+	return tmpl.Execute(writer, data)
+}
+
+func getHTMLPageString(htmlFileName string) (string, error) {
+	if DEBUG_ASSETS {
+		bytes, err := ioutil.ReadFile("./www/" + htmlFileName)
+		return string(bytes), err
+	}
+
+	return www.FSString(false, "/www/"+htmlFileName)
 }
