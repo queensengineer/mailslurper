@@ -149,7 +149,7 @@ try:
 		multipart=True
 	)
 
-	msg = addAttachment(msg, "./MailSlurperLogo.png", "image/png")
+	msg = addAttachment(msg, "../assets/MailSlurperLogo.png", "image/png")
 	sendMail(msg)
 
 	#
@@ -163,8 +163,8 @@ try:
 		"<p>This is a <strong>HTML</strong> email with an attachment. It's got lots of >great text< & special` characters.</p>"
 	)
 
-	msg = addAttachment(msg, "./MailSlurperLogo.png", "image/png")
-	msg = addAttachment(msg, "./MailSlurperLogo.png", "image/png")
+	msg = addAttachment(msg, "../assets/MailSlurperLogo.png", "image/png")
+	msg = addAttachment(msg, "../assets/MailSlurperLogo.png", "image/png")
 
 	sendMail(msg)
 
@@ -179,7 +179,7 @@ try:
 		"<p>This is a <strong>HTML</strong> email with a CSV attachment.</p>"
 	)
 
-	msg = addAttachment(msg, "./test-files/testcsv.csv", "application/octet-stream", base64Encode=False)
+	msg = addAttachment(msg, "../assets/testcsv.csv", "application/octet-stream", base64Encode=False)
 	sendMail(msg)
 
 	#
@@ -206,7 +206,7 @@ try:
 		"<p>This is a <strong>HTML</strong> email with a CSV attachment.</p>"
 	)
 
-	msg = addAttachment(msg, "./config.json", "application/json")
+	msg = addAttachment(msg, "../cmd/mailslurper/config.json", "application/json")
 	sendMail(msg)
 
 	#
