@@ -10,21 +10,21 @@ populated after an incoming client connection has finished
 sending mail data to this server.
 */
 type MailItem struct {
-	Id          string                   `json:"id"`
-	DateSent    string                   `json:"dateSent"`
-	FromAddress string                   `json:"fromAddress"`
-	ToAddresses []string                 `json:"toAddresses"`
-	Subject     string                   `json:"subject"`
-	XMailer     string                   `json:"xmailer"`
-	Body        string                   `json:"body"`
-	ContentType string                   `json:"contentType"`
-	Boundary    string                   `json:"boundary"`
+	ID          string        `json:"id"`
+	DateSent    string        `json:"dateSent"`
+	FromAddress string        `json:"fromAddress"`
+	ToAddresses []string      `json:"toAddresses"`
+	Subject     string        `json:"subject"`
+	XMailer     string        `json:"xmailer"`
+	Body        string        `json:"body"`
+	ContentType string        `json:"contentType"`
+	Boundary    string        `json:"boundary"`
 	Attachments []*Attachment `json:"attachments"`
 }
 
 func NewMailItem(id, dateSent, fromAddress string, toAddresses []string, subject, xMailer, body, contentType, boundary string, attachments []*Attachment) *MailItem {
 	return &MailItem{
-		Id:          id,
+		ID:          id,
 		DateSent:    dateSent,
 		FromAddress: fromAddress,
 		ToAddresses: toAddresses,

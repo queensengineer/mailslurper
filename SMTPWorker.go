@@ -99,7 +99,7 @@ func (this *SmtpWorker) InitializeMailItem() {
 	 * get the mail item once it is retrieved from the TCP socket.
 	 */
 	id, _ := GenerateId()
-	this.Mail.Id = id
+	this.Mail.ID = id
 }
 
 /*

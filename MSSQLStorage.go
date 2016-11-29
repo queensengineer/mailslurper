@@ -137,9 +137,9 @@ func (storage *MSSQLStorage) GetMailByID(mailItemID string) (MailItem, error) {
 		/*
 		 * Only capture the mail item once. Every subsequent record is an attachment
 		 */
-		if result.Id == "" {
+		if result.ID == "" {
 			result = MailItem{
-				Id:          mailItemID,
+				ID:          mailItemID,
 				DateSent:    dateSent,
 				FromAddress: fromAddress,
 				ToAddresses: strings.Split(toAddressList, "; "),
@@ -276,7 +276,7 @@ func (storage *MSSQLStorage) GetMailCollection(offset, length int, mailSearch *M
 			}
 
 			currentMailItem = MailItem{
-				Id:          mailItemID,
+				ID:          mailItemID,
 				DateSent:    dateSent,
 				FromAddress: fromAddress,
 				ToAddresses: strings.Split(toAddressList, "; "),
@@ -373,7 +373,7 @@ func (storage *MSSQLStorage) StoreMail(mailItem *MailItem) (string, error) {
 	}
 
 	_, err = statement.Exec(
-		mailItem.Id,
+		mailItem.ID,
 		mailItem.DateSent,
 		mailItem.FromAddress,
 		strings.Join(mailItem.ToAddresses, "; "),
@@ -394,7 +394,7 @@ func (storage *MSSQLStorage) StoreMail(mailItem *MailItem) (string, error) {
 	/*
 	 * Insert attachments
 	 */
-	if err = storeAttachments(mailItem.Id, transaction, mailItem.Attachments); err != nil {
+	if err = storeAttachments(mailItem.ID, transaction, mailItem.Attachments); err != nil {
 		transaction.Rollback()
 		return "", fmt.Errorf("Unable to insert attachments in StoreMail: %s", err.Error())
 	}
@@ -402,5 +402,5 @@ func (storage *MSSQLStorage) StoreMail(mailItem *MailItem) (string, error) {
 	transaction.Commit()
 	log.Printf("New mail item written to database.\n\n")
 
-	return mailItem.Id, nil
+	return mailItem.ID, nil
 }

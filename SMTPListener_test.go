@@ -16,8 +16,8 @@ func TestSmtpListener(t *testing.T) {
 			var err error
 
 			config := &Configuration{
-				SmtpAddress: "127.0.0.1",
-				SmtpPort:    0,
+				SMTPAddress: "127.0.0.1",
+				SMTPPort:    0,
 			}
 
 			if expected, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
@@ -39,8 +39,8 @@ func TestSmtpListener(t *testing.T) {
 			actual := false
 
 			config := &Configuration{
-				SmtpAddress: "abcd",
-				SmtpPort:    0,
+				SMTPAddress: "abcd",
+				SMTPPort:    0,
 			}
 
 			_, err = SetupSMTPServerListener(config)
@@ -58,8 +58,8 @@ func TestSmtpListener(t *testing.T) {
 			var err error
 
 			config := &Configuration{
-				SmtpAddress: "127.0.0.1",
-				SmtpPort:    0,
+				SMTPAddress: "127.0.0.1",
+				SMTPPort:    0,
 				CertFile:    "../mocks/mailslurper-cert.pem",
 				KeyFile:     "../mocks/mailslurper-key.pem",
 			}
@@ -82,8 +82,8 @@ func TestSmtpListener(t *testing.T) {
 			var err error
 
 			config := &Configuration{
-				SmtpAddress: "127.0.0.1",
-				SmtpPort:    0,
+				SMTPAddress: "127.0.0.1",
+				SMTPPort:    0,
 				CertFile:    "../mocks/empty-file.pem",
 				KeyFile:     "../mocks/empty-file.pem",
 			}
@@ -97,8 +97,8 @@ func TestSmtpListener(t *testing.T) {
 		var err error
 
 		config := &Configuration{
-			SmtpAddress: "127.0.0.1",
-			SmtpPort:    0,
+			SMTPAddress: "127.0.0.1",
+			SMTPPort:    0,
 		}
 
 		handle, err := SetupSMTPServerListener(config)
