@@ -273,13 +273,10 @@ func (this *SmtpWorker) Work() {
 		 * or some critical error occurs and we force quit.
 		 */
 		startTime := time.Now()
-		log.Printf("startTime: %v", startTime)
 
 		for this.State != SMTP_WORKER_DONE && this.State != SMTP_WORKER_ERROR {
 			streamInput = this.Reader.Read()
 			command, err = GetCommandFromString(streamInput)
-
-			log.Printf("command: %v", command)
 
 			if err != nil {
 				log.Println("libmailslurper: ERROR finding command from input", streamInput, "-", err)
