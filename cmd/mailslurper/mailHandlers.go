@@ -101,7 +101,7 @@ func getMail(writer http.ResponseWriter, request *http.Request) {
 	/*
 	 * Validate incoming arguments
 	 */
-	if mailID, ok = pathParts["mailID"]; !ok {
+	if mailID, ok = pathParts["id"]; !ok {
 		logger.Error("Invalid mail ID passed to GetMail")
 		httpService.WriteText(writer, "A valid mail ID is required", 400)
 		return
