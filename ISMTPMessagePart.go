@@ -11,7 +11,13 @@ type ISMTPMessagePart interface {
 	AddHeaders(headerSet ISet) error
 	BuildMessages(body string) error
 	ContentIsMultipart() (bool, error)
+	GetBody() string
 	GetBoundary() (string, error)
 	GetBoundaryFromHeaderString(header string) (string, error)
+	GetContentDisposition() string
+	GetContentType() string
+	GetFilenameFromContentDisposition() string
+	GetHeader(key string) string
+	GetMessageParts() []ISMTPMessagePart
 	ParseMessages(body string, boundary string) error
 }

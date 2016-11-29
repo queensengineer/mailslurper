@@ -20,6 +20,11 @@ type MailItem struct {
 	ContentType string        `json:"contentType"`
 	Boundary    string        `json:"boundary"`
 	Attachments []*Attachment `json:"attachments"`
+
+	Message           *SMTPMessagePart
+	InlineAttachments []*Attachment
+	TextBody          string
+	HTMLBody          string
 }
 
 func NewMailItem(id, dateSent, fromAddress string, toAddresses []string, subject, xMailer, body, contentType, boundary string, attachments []*Attachment) *MailItem {
@@ -34,5 +39,7 @@ func NewMailItem(id, dateSent, fromAddress string, toAddresses []string, subject
 		ContentType: contentType,
 		Boundary:    boundary,
 		Attachments: attachments,
+
+		Message: NewSMTPMessagePart(),
 	}
 }

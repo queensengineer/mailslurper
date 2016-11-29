@@ -92,6 +92,7 @@ be written to the receiver channel.
 func (this *SmtpWorker) InitializeMailItem() {
 	this.Mail.ToAddresses = make([]string, 0)
 	this.Mail.Attachments = make([]*Attachment, 0)
+	this.Mail.Message = NewSMTPMessagePart()
 
 	/*
 	 * IDs are generated ahead of time because
@@ -185,15 +186,88 @@ func (this *SmtpWorker) Process_DATA(streamInput string) (MailHeader, MailBody, 
 	}
 
 	/*
-	 * Parse the body. Send the
-	 */
-	if err = body.Parse(entireMailContents, header.Boundary); err != nil {
-		this.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
-		return header, body, err
+		 * Parse the body. Send the
+		if err = body.Parse(entireMailContents, header.Boundary); err != nil {
+			this.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
+			return header, body, err
+		}
+	*/
+
+	if err = this.Mail.Message.BuildMessages(entireMailContents); err != nil {
+		log.Printf("libmailslurper: ERROR parsing message contents: %s", err.Error())
+	}
+
+	/*
+		t, _ := json.MarshalIndent(this.Mail.Message, "", "  ")
+		log.Printf("libmailslurper: INFO - Message Parts: %s", string(t))
+
+		log.Printf("Message: %s", this.Mail.Message.MessageParts[0].GetMessageParts()[1].GetBody())
+	*/
+
+	if len(this.Mail.Message.MessageParts) > 0 {
+		this.recordMessagePart(this.Mail.Message.MessageParts[0])
+	} else {
+		log.Printf("libmailslurper: ERROR - MessageParts has no parts!")
+	}
+
+	if this.Mail.HTMLBody != "" {
+		this.Mail.Body = this.Mail.HTMLBody
+	} else {
+		this.Mail.Body = this.Mail.TextBody
 	}
 
 	this.Writer.SendOkResponse()
 	return header, body, nil
+}
+
+func (this *SmtpWorker) recordMessagePart(message ISMTPMessagePart) error {
+	if this.isMIMEType(message, "text/plain") && this.Mail.TextBody == "" && !this.messagePartIsAttachment(message) {
+		this.Mail.TextBody = message.GetBody()
+	} else {
+		if this.isMIMEType(message, "text/html") && this.Mail.HTMLBody == "" && !this.messagePartIsAttachment(message) {
+			this.Mail.HTMLBody = message.GetBody()
+		} else {
+			if this.isMIMEType(message, "multipart") {
+				for _, m := range message.GetMessageParts() {
+					this.recordMessagePart(m)
+				}
+			} else {
+				this.addAttachment(message)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (this *SmtpWorker) isMIMEType(messagePart ISMTPMessagePart, mimeType string) bool {
+	return strings.HasPrefix(messagePart.GetContentType(), mimeType)
+}
+
+func (this *SmtpWorker) messagePartIsAttachment(messagePart ISMTPMessagePart) bool {
+	return strings.Contains(messagePart.GetContentDisposition(), "attachment")
+}
+
+func (this *SmtpWorker) addAttachment(messagePart ISMTPMessagePart) error {
+	headers := &AttachmentHeader{
+		ContentType:             messagePart.GetHeader("Content-Type"),
+		MIMEVersion:             messagePart.GetHeader("MIME-Version"),
+		ContentTransferEncoding: messagePart.GetHeader("Content-Transfer-Encoding"),
+		ContentDisposition:      messagePart.GetContentDisposition(),
+		FileName:                messagePart.GetFilenameFromContentDisposition(),
+	}
+
+	log.Printf("libmailslurper: INFO - Attachment: %v", headers)
+
+	attachment := NewAttachment(headers, messagePart.GetBody())
+
+	if this.messagePartIsAttachment(messagePart) {
+		this.Mail.Attachments = append(this.Mail.Attachments, attachment)
+	} else {
+		this.Mail.InlineAttachments = append(this.Mail.InlineAttachments, attachment)
+	}
+
+	return nil
 }
 
 /*

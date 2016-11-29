@@ -70,7 +70,7 @@ func (messagePart *SMTPMessagePart) BuildMessages(body string) error {
 		return errors.Wrapf(err, "Error adding headers to message part")
 	}
 
-	log.Printf("BuildMessages: adding headers %v\n", messagePart.Message.Header)
+	//log.Printf("BuildMessages: adding headers %v\n", messagePart.Message.Header)
 
 	/*
 	 * If this is not a multipart message, bail early. We've got
@@ -92,15 +92,50 @@ func (messagePart *SMTPMessagePart) BuildMessages(body string) error {
 		return errors.Wrapf(err, "Error getting boundary for message part")
 	}
 
-	log.Printf("BuildMessages: boundary is %s\n", boundary)
+	//log.Printf("BuildMessages: boundary is %s\n", boundary)
 
 	if err = messagePart.AddBody(body); err != nil {
 		return errors.Wrapf(err, "Error adding body to message part")
 	}
 
-	log.Printf("BuildMessages: body is %s\n\n", body)
+	//log.Printf("BuildMessages: body is %s\n\n", body)
 
 	return messagePart.ParseMessages(body, boundary)
+}
+
+func (messagePart *SMTPMessagePart) GetBody() string {
+	var err error
+	var bytes []byte
+
+	if bytes, err = ioutil.ReadAll(messagePart.Message.Body); err != nil {
+		log.Printf("libmailslurper: ERROR - Error reading message body: %s", err.Error())
+		return ""
+	}
+
+	return string(bytes)
+}
+
+func (messagePart *SMTPMessagePart) GetFilenameFromContentDisposition() string {
+	contentDisposition := messagePart.GetContentDisposition()
+	contentDispositionSplit := strings.Split(contentDisposition, ";")
+	contentDispositionRightSide := strings.TrimSpace(strings.Join(contentDispositionSplit[1:], ";"))
+
+	fileName := ""
+
+	if strings.Contains(strings.ToLower(contentDisposition), "attachment") && len(strings.TrimSpace(contentDispositionRightSide)) > 0 {
+		filenameSplit := strings.Split(contentDispositionRightSide, "=")
+		fileName = strings.Replace(strings.Join(filenameSplit[1:], "="), "\"", "", -1)
+	}
+
+	return fileName
+}
+
+func (messagePart *SMTPMessagePart) GetHeader(key string) string {
+	return messagePart.Message.Header.Get(key)
+}
+
+func (messagePart *SMTPMessagePart) GetMessageParts() []ISMTPMessagePart {
+	return messagePart.MessageParts
 }
 
 func (messagePart *SMTPMessagePart) ParseMessages(body string, boundary string) error {
@@ -161,6 +196,14 @@ func (messagePart *SMTPMessagePart) GetBoundaryFromHeaderString(header string) (
 	}
 
 	return params["boundary"], nil
+}
+
+func (messagePart *SMTPMessagePart) GetContentDisposition() string {
+	return messagePart.Message.Header.Get("Content-Disposition")
+}
+
+func (messagePart *SMTPMessagePart) GetContentType() string {
+	return messagePart.Message.Header.Get("Content-Type")
 }
 
 func (messagePart *SMTPMessagePart) parseContentType() (string, string, error) {

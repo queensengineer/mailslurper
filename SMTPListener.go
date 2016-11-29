@@ -73,6 +73,7 @@ func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemR
 			select {
 			case item := <-mailItemChannel:
 				for _, r := range receivers {
+					log.Printf("libmailslurper: INFO - Item received: %v", item)
 					go r.Receive(&item)
 				}
 			}
