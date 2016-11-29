@@ -17,7 +17,7 @@ func admin(writer http.ResponseWriter, request *http.Request) {
 		Title: "Admin",
 	}
 
-	if err = mailslurper.RenderMainLayout(writer, request, "admin.html", data); err != nil {
+	if err = renderMainLayout(writer, request, "admin.html", data); err != nil {
 		httpService.WriteText(writer, err.Error(), 500)
 	}
 }
@@ -33,7 +33,7 @@ func index(writer http.ResponseWriter, request *http.Request) {
 		Title: "Mail",
 	}
 
-	if err = mailslurper.RenderMainLayout(writer, request, "index.html", data); err != nil {
+	if err = renderMainLayout(writer, request, "index.html", data); err != nil {
 		httpService.WriteText(writer, err.Error(), 500)
 	}
 }
@@ -48,7 +48,7 @@ func manageSavedSearches(writer http.ResponseWriter, request *http.Request) {
 		Title: "Manage Saved Searches",
 	}
 
-	if err = mailslurper.RenderMainLayout(writer, request, "manageSavedSearches.html", data); err != nil {
+	if err = renderMainLayout(writer, request, "manageSavedSearches.html", data); err != nil {
 		httpService.WriteText(writer, err.Error(), 500)
 	}
 }

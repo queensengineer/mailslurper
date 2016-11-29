@@ -14,7 +14,7 @@ func setupAndStartServiceTierMux() {
 	serviceTierConfig = &mailslurper.ServiceTierConfiguration{
 		Address:  config.ServiceAddress,
 		Port:     config.ServicePort,
-		Database: dDatabase,
+		Database: database,
 		CertFile: config.CertFile,
 		KeyFile:  config.KeyFile,
 	}

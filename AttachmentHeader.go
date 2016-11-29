@@ -60,7 +60,7 @@ func (this *AttachmentHeader) Parse(contents string) {
 	 * and figure out what headers are present. Store them.
 	 * Sadly some headers require special processing.
 	 */
-	contents = header.UnfoldHeaders(contents)
+	contents = UnfoldHeaders(contents)
 	splitHeader := strings.Split(contents, "\r\n")
 	numLines := len(splitHeader)
 

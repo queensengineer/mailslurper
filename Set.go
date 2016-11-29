@@ -39,7 +39,7 @@ func (set *Set) Get(headerName string) (IItem, error) {
 		}
 	}
 
-	return nil, smtperrors.MissingHeader(headerName)
+	return nil, MissingHeader(headerName)
 }
 
 /*

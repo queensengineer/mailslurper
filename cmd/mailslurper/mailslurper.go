@@ -8,14 +8,17 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/adampresley/presleylife/www"
 	"github.com/adampresley/webframework/console"
 	"github.com/adampresley/webframework/logging"
+	"github.com/alecthomas/template"
 	"github.com/mailslurper/mailslurper"
 	"github.com/skratchdot/open-golang/open"
 )
@@ -25,27 +28,27 @@ const (
 	SERVER_VERSION string = "1.11.1"
 
 	// Set to true while developing
-	DEBUG_ASSETS bool = false
+	DEBUG_ASSETS bool = true
 
 	CONFIGURATION_FILE_NAME string = "config.json"
 )
 
 var config *mailslurper.Configuration
 var database mailslurper.IStorage
-var log *logging.Logger
+var logger *logging.Logger
 var serviceTierConfig *mailslurper.ServiceTierConfiguration
 
 func main() {
 	var err error
 
-	log = logging.NewLoggerWithMinimumLevel("MailSlurper", logging.StringToLogType("debug"))
-	log.Infof("Starting MailSlurper Server v%s", SERVER_VERSION)
+	logger = logging.NewLoggerWithMinimumLevel("MailSlurper", logging.StringToLogType("debug"))
+	logger.Infof("Starting MailSlurper Server v%s", SERVER_VERSION)
 
 	/*
 	 * Prepare SIGINT handler (CTRL+C)
 	 */
 	console.ListenForSIGINT(func() {
-		log.Infof("Shutting down")
+		logger.Infof("Shutting down")
 		os.Exit(0)
 	})
 
@@ -53,7 +56,7 @@ func main() {
 	 * Load configuration
 	 */
 	if config, err = mailslurper.LoadConfigurationFromFile(CONFIGURATION_FILE_NAME); err != nil {
-		log.Fatalf("There was an error reading the configuration file '%s': %s", CONFIGURATION_FILE_NAME, err.Error())
+		logger.Fatalf("There was an error reading the configuration file '%s': %s", CONFIGURATION_FILE_NAME, err.Error())
 		os.Exit(-1)
 	}
 
@@ -63,7 +66,7 @@ func main() {
 	storageType, databaseConnection := config.GetDatabaseConfiguration()
 
 	if database, err = mailslurper.ConnectToStorage(storageType, databaseConnection); err != nil {
-		log.Fatalf("Error connecting to storage type '%d' with a connection string of %s: %s", int(storageType), databaseConnection, err.Error())
+		logger.Fatalf("Error connecting to storage type '%d' with a connection string of %s: %s", int(storageType), databaseConnection, err.Error())
 		os.Exit(-1)
 	}
 
@@ -79,11 +82,11 @@ func main() {
 	 */
 	smtpServer, err := mailslurper.SetupSMTPServerListener(config)
 	if err != nil {
-		log.Println("MailSlurper: ERROR - There was a problem starting the SMTP listener:", err)
+		logger.Errorf("MailSlurper: ERROR - There was a problem starting the SMTP listener: %s", err.Error())
 		os.Exit(0)
 	}
 
-	defer CloseSMTPServerListener(smtpServer)
+	defer mailslurper.CloseSMTPServerListener(smtpServer)
 
 	/*
 	 * Setup receivers (subscribers) to handle new mail items.
@@ -95,7 +98,7 @@ func main() {
 	/*
 	 * Start the SMTP dispatcher
 	 */
-	go server.Dispatch(pool, smtpServer, receivers)
+	go mailslurper.Dispatch(pool, smtpServer, receivers)
 
 	/*
 	 * Setup and start the HTTP listener for the application site
@@ -112,14 +115,14 @@ func main() {
 	setupAndStartServiceTierMux()
 }
 
-func startBrowser(config *configuration.Configuration) {
+func startBrowser(config *mailslurper.Configuration) {
 	timer := time.NewTimer(time.Second)
 	go func() {
 		<-timer.C
-		log.Printf("Opening web browser to http://%s:%d\n", config.WWWAddress, config.WWWPort)
+		logger.Infof("Opening web browser to http://%s:%d\n", config.WWWAddress, config.WWWPort)
 		err := open.Start(fmt.Sprintf("http://%s:%d", config.WWWAddress, config.WWWPort))
 		if err != nil {
-			log.Printf("ERROR - Could not open browser - %s\n", err.Error())
+			logger.Infof("ERROR - Could not open browser - %s\n", err.Error())
 		}
 	}()
 }
@@ -139,7 +142,7 @@ func splitPath(request *http.Request) []string {
 }
 
 func parsePath(request *http.Request, pattern string) map[string]string {
-	p := regexp.Compile("\\{(.*)\\}")
+	p, _ := regexp.Compile("\\{(.*)\\}")
 	splitPath := splitPath(request)
 	splitPattern := strings.Split(pattern, "/")
 	result := make(map[string]string)
@@ -151,7 +154,7 @@ func parsePath(request *http.Request, pattern string) map[string]string {
 
 	for index, value := range splitPath {
 		if strings.HasPrefix(splitPattern[index], "{") {
-			key = p.ReplaceAllString(, "$1")
+			key = p.ReplaceAllString(splitPattern[index], "$1")
 		} else {
 			key = splitPattern[index]
 		}
@@ -177,14 +180,14 @@ func renderMainLayout(writer http.ResponseWriter, request *http.Request, htmlFil
 		var bytes []byte
 
 		if bytes, err = ioutil.ReadFile("./www/mailslurper/layouts/mainLayout.html"); err != nil {
-			log.Errorf("Error setting up layout: %s", err.Error())
+			logger.Errorf("Error setting up layout: %s", err.Error())
 			os.Exit(-1)
 		}
 
 		layout = string(bytes)
 	} else {
 		if layout, err = www.FSString(false, "/www/mailslurper/layouts/mainLayout.html"); err != nil {
-			log.Infof("Error setting up layout: %s", err.Error())
+			logger.Infof("Error setting up layout: %s", err.Error())
 			os.Exit(-1)
 		}
 	}

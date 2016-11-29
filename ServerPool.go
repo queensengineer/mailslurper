@@ -63,8 +63,8 @@ func (pool ServerPool) NextWorker(connection net.Conn, receiver chan MailItem) (
 		worker.Prepare(
 			connection,
 			receiver,
-			smtpio.SmtpReader{Connection: connection},
-			smtpio.SmtpWriter{Connection: connection},
+			SmtpReader{Connection: connection},
+			SmtpWriter{Connection: connection},
 		)
 
 		log.Println("libmailslurper: INFO - Worker", worker.WorkerId, "queued to handle connection from", connection.RemoteAddr().String())

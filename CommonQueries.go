@@ -186,7 +186,7 @@ func storeAttachments(mailItemID string, transaction *sql.Tx, attachments []*Att
 	var attachmentID string
 
 	for _, currentAttachment := range attachments {
-		if attachmentID, err = mailitem.GenerateId(); err != nil {
+		if attachmentID, err = GenerateId(); err != nil {
 			return fmt.Errorf("Error generating ID for attachment: %s", err.Error())
 		}
 

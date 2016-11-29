@@ -24,7 +24,7 @@ type SmtpWorker struct {
 	State                  SmtpWorkerState
 	WorkerId               int
 	Writer                 SmtpWriter
-	XSSService             sanitizer.XSSServiceProvider
+	XSSService             sanitizer.IXSSServiceProvider
 
 	pool ServerPool
 }
@@ -44,22 +44,22 @@ func (this *SmtpWorker) ExecuteCommand(command SmtpCommand, streamInput string) 
 	thisMailItem := this.SMTPMailItem.(*SMTPMailItem)
 
 	switch command {
-	case smtpconstants.HELO:
+	case HELO:
 		err = this.Process_HELO(streamInput)
 
-	case smtpconstants.MAIL:
+	case MAIL:
 		if err = this.Process_MAIL(streamInput); err != nil {
 			log.Printf("libmailslurper: ERROR - Problem processing MAIL FROM: %s\n", err.Error())
 		} else {
 			log.Printf("libmailslurper: INFO - Mail from %s\n", thisMailItem.FromAddress)
 		}
 
-	case smtpconstants.RCPT:
+	case RCPT:
 		if err = this.Process_RCPT(streamInput); err != nil {
 			log.Printf("libmailslurper: ERROR - Problem processing RCPT TO: %s\n", err.Error())
 		}
 
-	case smtpconstants.DATA:
+	case DATA:
 		headers, body, err = this.Process_DATA(streamInput)
 		if err != nil {
 			log.Println("libmailslurper: ERROR - Problem calling Process_DATA -", err)
@@ -98,7 +98,7 @@ func (this *SmtpWorker) InitializeMailItem() {
 	 * we do not know what order recievers
 	 * get the mail item once it is retrieved from the TCP socket.
 	 */
-	id, _ := mailitem.GenerateId()
+	id, _ := GenerateId()
 	this.Mail.Id = id
 }
 
@@ -110,7 +110,7 @@ func NewSmtpWorker(
 	workerID int,
 	pool ServerPool,
 	emailValidationService EmailValidationProvider,
-	xssService sanitizer.XSSServiceProvider,
+	xssService sanitizer.IXSSServiceProvider,
 ) *SmtpWorker {
 	return &SmtpWorker{
 		EmailValidationService: emailValidationService,
@@ -273,10 +273,13 @@ func (this *SmtpWorker) Work() {
 		 * or some critical error occurs and we force quit.
 		 */
 		startTime := time.Now()
+		log.Printf("startTime: %v", startTime)
 
 		for this.State != SMTP_WORKER_DONE && this.State != SMTP_WORKER_ERROR {
 			streamInput = this.Reader.Read()
 			command, err = GetCommandFromString(streamInput)
+
+			log.Printf("command: %v", command)
 
 			if err != nil {
 				log.Println("libmailslurper: ERROR finding command from input", streamInput, "-", err)

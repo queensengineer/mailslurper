@@ -20,7 +20,7 @@ a reference to a collection of sub-messages, if any. This allows us to support
 the recursive tree-like nature of the MIME protocol.
 */
 type SMTPMessagePart struct {
-	Message      *Message
+	Message      *mail.Message
 	MessageParts []ISMTPMessagePart
 }
 
@@ -29,7 +29,7 @@ NewSMTPMessagePart returns a new instance of this struct
 */
 func NewSMTPMessagePart() *SMTPMessagePart {
 	return &SMTPMessagePart{
-		Message:      &Message{},
+		Message:      &mail.Message{},
 		MessageParts: make([]ISMTPMessagePart, 0),
 	}
 }
@@ -50,6 +50,11 @@ func (messagePart *SMTPMessagePart) AddHeaders(headerSet ISet) error {
 	return nil
 }
 
+/*
+BuildMessages pulls the message body from the data transmission
+and stores the whole body. If the message type is multipart it then
+attempts to parse the parts.
+*/
 func (messagePart *SMTPMessagePart) BuildMessages(body string) error {
 	var err error
 	var headerSet ISet
@@ -57,7 +62,7 @@ func (messagePart *SMTPMessagePart) BuildMessages(body string) error {
 	var boundary string
 
 	headerBodySplit := strings.Split(body, "\r\n\r\n")
-	if headerSet, err = header.NewHeaderSet(headerBodySplit[0]); err != nil {
+	if headerSet, err = NewHeaderSet(headerBodySplit[0]); err != nil {
 		return errors.Wrapf(err, "Error while building message part")
 	}
 

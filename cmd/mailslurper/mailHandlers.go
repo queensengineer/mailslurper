@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/adampresley/webframework/httpService"
-	"github.com/mailslurper/libmailslurper/model/attachment"
 	"github.com/mailslurper/mailslurper"
 )
 
@@ -56,7 +55,7 @@ func deleteMail(writer http.ResponseWriter, request *http.Request) {
 	pathParts := parsePath(request, "/mail/{pruneCode}")
 
 	if len(pathParts) < 2 {
-		log.Errorf("Invalid delete mail request")
+		logger.Errorf("Invalid delete mail request")
 		httpService.WriteText(writer, "Invalid delete mail request", 400)
 		return
 	}
@@ -64,7 +63,7 @@ func deleteMail(writer http.ResponseWriter, request *http.Request) {
 	pruneCode := mailslurper.PruneCode(pathParts["pruneCode"])
 
 	if !pruneCode.IsValid() {
-		log.Errorf("Attempt to use invalid prune code - %s", pruneCode)
+		logger.Errorf("Attempt to use invalid prune code - %s", pruneCode)
 		httpService.WriteText(writer, "Invalid prune type", 400)
 		return
 	}
@@ -72,12 +71,12 @@ func deleteMail(writer http.ResponseWriter, request *http.Request) {
 	startDate := pruneCode.ConvertToDate()
 
 	if err = database.DeleteMailsAfterDate(startDate); err != nil {
-		log.Errorf("Problem deleting mails - %s", err.Error())
+		logger.Errorf("Problem deleting mails - %s", err.Error())
 		httpService.WriteText(writer, "There was a problem deleting mails", 500)
 		return
 	}
 
-	log.Infof("Deleting mails, code %s - Start - %s", pruneCode.String(), startDate)
+	logger.Infof("Deleting mails, code %s - Start - %s", pruneCode.String(), startDate)
 	httpService.WriteText(writer, "OK", 200)
 }
 
@@ -88,7 +87,7 @@ getMail returns a single mail item by ID.
 */
 func getMail(writer http.ResponseWriter, request *http.Request) {
 	var mailID string
-	var mailItem MailItem
+	var mailItem mailslurper.MailItem
 	var err error
 	var ok bool
 
@@ -103,7 +102,7 @@ func getMail(writer http.ResponseWriter, request *http.Request) {
 	 * Validate incoming arguments
 	 */
 	if mailID, ok = pathParts["mailID"]; !ok {
-		log.Error("Invalid mail ID passed to GetMail")
+		logger.Error("Invalid mail ID passed to GetMail")
 		httpService.WriteText(writer, "A valid mail ID is required", 400)
 		return
 	}
@@ -112,12 +111,12 @@ func getMail(writer http.ResponseWriter, request *http.Request) {
 	 * Retrieve the mail item
 	 */
 	if mailItem, err = database.GetMailByID(mailID); err != nil {
-		log.Errorf("Problem getting mail item in GetMail - %s", err.Error())
+		logger.Errorf("Problem getting mail item in GetMail - %s", err.Error())
 		httpService.WriteText(writer, "Problem getting mail item", 500)
 		return
 	}
 
-	log.Infof("Mail item %s retrieved", mailID)
+	logger.Infof("Mail item %s retrieved", mailID)
 
 	result := &mailslurper.MailItemResponse{
 		MailItem: mailItem,
@@ -136,7 +135,7 @@ func getMailCollection(writer http.ResponseWriter, request *http.Request) {
 	var err error
 	var pageNumberString string
 	var pageNumber int
-	var mailCollection []MailItem
+	var mailCollection []mailslurper.MailItem
 	var totalRecordCount int
 
 	/*
@@ -147,7 +146,7 @@ func getMailCollection(writer http.ResponseWriter, request *http.Request) {
 		pageNumber = 1
 	} else {
 		if pageNumber, err = strconv.Atoi(pageNumberString); err != nil {
-			log.Error("Invalid page number passed to GetMailCollection")
+			logger.Error("Invalid page number passed to GetMailCollection")
 			httpService.WriteText(writer, "A valid page number is required", 400)
 			return
 		}
@@ -159,7 +158,7 @@ func getMailCollection(writer http.ResponseWriter, request *http.Request) {
 	/*
 	 * Retrieve mail items
 	 */
-	mailSearch := &MailSearch{
+	mailSearch := &mailslurper.MailSearch{
 		Message: request.URL.Query().Get("message"),
 		Start:   request.URL.Query().Get("start"),
 		End:     request.URL.Query().Get("end"),
@@ -171,13 +170,13 @@ func getMailCollection(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	if mailCollection, err = database.GetMailCollection(offset, length, mailSearch); err != nil {
-		log.Errorf("Problem getting mail collection - %s", err.Error())
+		logger.Errorf("Problem getting mail collection - %s", err.Error())
 		httpService.WriteText(writer, "Problem getting mail collection", 500)
 		return
 	}
 
 	if totalRecordCount, err = database.GetMailCount(mailSearch); err != nil {
-		log.Errorf("Problem getting record count in GetMailCollection - %s", err.Error())
+		logger.Errorf("Problem getting record count in GetMailCollection - %s", err.Error())
 		httpService.WriteText(writer, "Error getting record count", 500)
 		return
 	}
@@ -187,7 +186,7 @@ func getMailCollection(writer http.ResponseWriter, request *http.Request) {
 		totalPages++
 	}
 
-	log.Infof("Mail collection page %d retrieved", pageNumber)
+	logger.Infof("Mail collection page %d retrieved", pageNumber)
 
 	result := &mailslurper.MailCollectionResponse{
 		MailItems:    mailCollection,
@@ -210,13 +209,13 @@ func getMailCount(writer http.ResponseWriter, request *http.Request) {
 	/*
 	 * Get the count
 	 */
-	if mailItemCount, err = database.GetMailCount(&MailSearch{}); err != nil {
-		log.Errorf("Problem getting mail item count in GetMailCount - %s", err.Error())
+	if mailItemCount, err = database.GetMailCount(&mailslurper.MailSearch{}); err != nil {
+		logger.Errorf("Problem getting mail item count in GetMailCount - %s", err.Error())
 		httpService.WriteText(writer, "Problem getting mail count", 500)
 		return
 	}
 
-	log.Infof("Mail item count - %d", mailItemCount)
+	logger.Infof("Mail item count - %d", mailItemCount)
 
 	result := mailslurper.MailCountResponse{
 		MailCount: mailItemCount,
@@ -232,7 +231,7 @@ getMailMessage returns the message contents of a single mail item
 */
 func getMailMessage(writer http.ResponseWriter, request *http.Request) {
 	var mailID string
-	var mailItem MailItem
+	var mailItem mailslurper.MailItem
 	var err error
 	var ok bool
 
@@ -252,7 +251,7 @@ func getMailMessage(writer http.ResponseWriter, request *http.Request) {
 	 * Validate incoming arguments
 	 */
 	if mailID, ok = pathParts["mailID"]; !ok {
-		log.Error("Invalid mail ID passed to GetMailMessage")
+		logger.Error("Invalid mail ID passed to GetMailMessage")
 		httpService.WriteText(writer, "A valid mail ID is required", 400)
 		return
 	}
@@ -261,12 +260,12 @@ func getMailMessage(writer http.ResponseWriter, request *http.Request) {
 	 * Retrieve the mail item
 	 */
 	if mailItem, err = database.GetMailByID(mailID); err != nil {
-		log.Errorf("Problem getting mail item in GetMailMessage - %s", err.Error())
+		logger.Errorf("Problem getting mail item in GetMailMessage - %s", err.Error())
 		httpService.WriteText(writer, "Problem getting mail item", 500)
 		return
 	}
 
-	log.Infof("Mail item %s retrieved", mailID)
+	logger.Infof("Mail item %s retrieved", mailID)
 	httpService.WriteHTML(writer, mailItem.Body, 200)
 }
 
@@ -280,7 +279,7 @@ func downloadAttachment(writer http.ResponseWriter, request *http.Request) {
 	var mailID string
 	var ok bool
 
-	var attachment attachment.Attachment
+	var attachment mailslurper.Attachment
 	var data []byte
 
 	if !isVerb(request, "GET") {
@@ -299,13 +298,13 @@ func downloadAttachment(writer http.ResponseWriter, request *http.Request) {
 	 * Validate incoming arguments
 	 */
 	if mailID, ok = pathParts["mailID"]; !ok {
-		log.Error("No valid mail ID passed to DownloadAttachment")
+		logger.Error("No valid mail ID passed to DownloadAttachment")
 		httpService.WriteText(writer, "A valid mail ID is required", 400)
 		return
 	}
 
 	if attachmentID, ok = pathParts["attachmentID"]; !ok {
-		log.Error("No valid attachment ID passed to DownloadAttachment")
+		logger.Error("No valid attachment ID passed to DownloadAttachment")
 		httpService.WriteText(writer, "A valid attachment ID is required", 400)
 		return
 	}
@@ -314,7 +313,7 @@ func downloadAttachment(writer http.ResponseWriter, request *http.Request) {
 	 * Retrieve the attachment
 	 */
 	if attachment, err = database.GetAttachment(mailID, attachmentID); err != nil {
-		log.Errorf("Problem getting attachment %s - %s", attachmentID, err.Error())
+		logger.Errorf("Problem getting attachment %s - %s", attachmentID, err.Error())
 		httpService.WriteText(writer, "Error getting attachment", 500)
 		return
 	}
@@ -325,7 +324,7 @@ func downloadAttachment(writer http.ResponseWriter, request *http.Request) {
 	if attachment.IsContentBase64() {
 		data, err = base64.StdEncoding.DecodeString(attachment.Contents)
 		if err != nil {
-			log.Errorf("Problem decoding attachment %s - %s", attachmentID, err.Error())
+			logger.Errorf("Problem decoding attachment %s - %s", attachmentID, err.Error())
 			httpService.WriteText(writer, "Cannot decode attachment", 500)
 			return
 		}
@@ -333,8 +332,17 @@ func downloadAttachment(writer http.ResponseWriter, request *http.Request) {
 		data = []byte(attachment.Contents)
 	}
 
-	log.Infof("Attachment %s retrieved", attachmentID)
+	logger.Infof("Attachment %s retrieved", attachmentID)
 
 	reader := bytes.NewReader(data)
 	http.ServeContent(writer, request, attachment.Headers.FileName, time.Now(), reader)
+}
+
+func version(writer http.ResponseWriter, request *http.Request) {
+	if !isVerb(request, "GET") {
+		httpService.WriteText(writer, "Not found", 404)
+		return
+	}
+
+	httpService.WriteText(writer, SERVER_VERSION, 200)
 }

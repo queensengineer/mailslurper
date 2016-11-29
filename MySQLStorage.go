@@ -16,7 +16,7 @@ MySQLStorage implements the IStorage interface
 type MySQLStorage struct {
 	connectionInformation *ConnectionInformation
 	db                    *sql.DB
-	xssService            sanitizer.XSSServiceProvider
+	xssService            sanitizer.IXSSServiceProvider
 }
 
 /*

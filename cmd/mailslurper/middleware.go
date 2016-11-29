@@ -24,6 +24,6 @@ func baseMiddleware(next http.Handler) http.Handler {
 		writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CRSF-Token, Authorization")
 
 		next.ServeHTTP(writer, request)
-		log.Infof("%s - %s (%s)", request.Method, request.URL.String(), time.Since(startTime))
+		logger.Infof("%s - %s (%s)", request.Method, request.URL.String(), time.Since(startTime))
 	})
 }

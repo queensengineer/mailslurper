@@ -17,7 +17,7 @@ SQLiteStorage implements the IStorage interface
 type SQLiteStorage struct {
 	connectionInformation *ConnectionInformation
 	db                    *sql.DB
-	xssService            sanitizer.XSSServiceProvider
+	xssService            sanitizer.IXSSServiceProvider
 }
 
 /*

@@ -5,7 +5,6 @@
 package mailslurper
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -80,7 +79,7 @@ GetFullSMTPBindingAddress returns a full address and port for the MailSlurper SM
 server.
 */
 func (config *Configuration) GetFullSMTPBindingAddress() string {
-	return fmt.Sprintf("%s:%d", config.SmtpAddress, config.SmtpPort)
+	return fmt.Sprintf("%s:%d", config.SMTPAddress, config.SMTPPort)
 }
 
 /*
@@ -95,16 +94,14 @@ LoadConfiguration reads data from a Reader into a new Configuration structure.
 */
 func LoadConfiguration(reader io.Reader) (*Configuration, error) {
 	var err error
-	var contents bytes.Buffer
 	var buffer = make([]byte, 4096)
-	var bytesRead int
 
 	result := &Configuration{}
-	if contents, err = ioutil.ReadAll(reader); err != nil {
+	if buffer, err = ioutil.ReadAll(reader); err != nil {
 		return result, err
 	}
 
-	if err = json.Unmarshal(contents.Bytes(), result); err != nil {
+	if err = json.Unmarshal(buffer, result); err != nil {
 		return result, err
 	}
 
@@ -139,7 +136,7 @@ func (config *Configuration) SaveConfiguration(configFile string) error {
 	var err error
 	var serializedConfigFile []byte
 
-	if serializedConfigFile, err := json.Marshal(config); err != nil {
+	if serializedConfigFile, err = json.Marshal(config); err != nil {
 		return err
 	}
 

@@ -1,6 +1,8 @@
 package mailslurper
 
 import (
+	"net/mail"
+
 	"github.com/adampresley/webframework/sanitizer"
 )
 
@@ -15,13 +17,13 @@ type SMTPMailItem struct {
 	Message     ISMTPMessagePart
 
 	EmailValidationService EmailValidationProvider
-	XSSService             sanitizer.XSSServiceProvider
+	XSSService             sanitizer.IXSSServiceProvider
 }
 
 /*
 NewSMTPMailItem returns a new instance
 */
-func NewSMTPMailItem(emailValidationService EmailValidationProvider, xssService sanitizer.XSSServiceProvider) *SMTPMailItem {
+func NewSMTPMailItem(emailValidationService EmailValidationProvider, xssService sanitizer.IXSSServiceProvider) *SMTPMailItem {
 	return &SMTPMailItem{
 		ToAddresses: make([]string, 0),
 
@@ -50,19 +52,24 @@ is an error it is returned.
 func (mailItem *SMTPMailItem) ProcessFrom(streamInput string) error {
 	var err error
 	var from string
+	var fromComponents *mail.Address
 
-	if err = validation.IsValidCommand(streamInput, "MAIL FROM"); err != nil {
+	if err = IsValidCommand(streamInput, "MAIL FROM"); err != nil {
 		return err
 	}
 
-	if from, err = smtputilities.GetCommandValue(streamInput, "MAIL FROM", ":"); err != nil {
+	if from, err = GetCommandValue(streamInput, "MAIL FROM", ":"); err != nil {
 		return err
 	}
 
-	from = mailItem.XSSService.SanitizeString(from)
+	if fromComponents, err = mailItem.EmailValidationService.GetEmailComponents(from); err != nil {
+		return InvalidEmail(from)
+	}
+
+	from = mailItem.XSSService.SanitizeString(fromComponents.Address)
 
 	if !mailItem.EmailValidationService.IsValidEmail(from) {
-		return smtperrors.InvalidEmail(from)
+		return InvalidEmail(from)
 	}
 
 	mailItem.FromAddress = from
@@ -76,19 +83,24 @@ is an error it is returned.
 func (mailItem *SMTPMailItem) ProcessRecipient(streamInput string) error {
 	var err error
 	var to string
+	var toComponents *mail.Address
 
-	if err = validation.IsValidCommand(streamInput, "RCPT TO"); err != nil {
+	if err = IsValidCommand(streamInput, "RCPT TO"); err != nil {
 		return err
 	}
 
-	if to, err = smtputilities.GetCommandValue(streamInput, "RCPT TO", ":"); err != nil {
+	if to, err = GetCommandValue(streamInput, "RCPT TO", ":"); err != nil {
 		return err
 	}
 
-	to = mailItem.XSSService.SanitizeString(to)
+	if toComponents, err = mailItem.EmailValidationService.GetEmailComponents(to); err != nil {
+		return InvalidEmail(to)
+	}
+
+	to = mailItem.XSSService.SanitizeString(toComponents.Address)
 
 	if !mailItem.EmailValidationService.IsValidEmail(to) {
-		return smtperrors.InvalidEmail(to)
+		return InvalidEmail(to)
 	}
 
 	mailItem.ToAddresses = append(mailItem.ToAddresses, to)

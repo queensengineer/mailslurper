@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 )
@@ -19,7 +18,7 @@ func setupAndStartAdminMux() {
 
 	go func() {
 		if err := http.ListenAndServe(config.GetFullWWWBindingAddress(), adminMux); err != nil {
-			log.Fatalf("Error starting HTTP admin listener: %s", err.Error())
+			logger.Fatalf("Error starting HTTP admin listener: %s", err.Error())
 			os.Exit(-1)
 		}
 	}()

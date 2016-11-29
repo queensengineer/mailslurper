@@ -2,23 +2,19 @@
 // Use of this source code is governed by the MIT license
 // that can be found in the LICENSE file.
 
-package server
+package mailslurper
 
 import (
 	"crypto/tls"
 	"log"
 	"net"
-
-	"github.com/mailslurper/libmailslurper/configuration"
-	"github.com/mailslurper/libmailslurper/model/mailitem"
-	"github.com/mailslurper/libmailslurper/receiver"
 )
 
 /*
 SetupSMTPServerListener establishes a listening connection to a socket on an address. This will
 return a net.Listener handle.
 */
-func SetupSMTPServerListener(config *configuration.Configuration) (net.Listener, error) {
+func SetupSMTPServerListener(config *Configuration) (net.Listener, error) {
 	var tcpAddress *net.TCPAddr
 	var certificate tls.Certificate
 	var err error
@@ -30,15 +26,15 @@ func SetupSMTPServerListener(config *configuration.Configuration) (net.Listener,
 
 		tlsConfig := &tls.Config{Certificates: []tls.Certificate{certificate}}
 
-		log.Println("libmailslurper: INFO - SMTP listener running on SSL - ", config.GetFullSmtpBindingAddress())
-		return tls.Listen("tcp", config.GetFullSmtpBindingAddress(), tlsConfig)
+		log.Println("libmailslurper: INFO - SMTP listener running on SSL - ", config.GetFullSMTPBindingAddress())
+		return tls.Listen("tcp", config.GetFullSMTPBindingAddress(), tlsConfig)
 	}
 
-	if tcpAddress, err = net.ResolveTCPAddr("tcp", config.GetFullSmtpBindingAddress()); err != nil {
+	if tcpAddress, err = net.ResolveTCPAddr("tcp", config.GetFullSMTPBindingAddress()); err != nil {
 		return &net.TCPListener{}, err
 	}
 
-	log.Println("libmailslurper: INFO - SMTP listener running on", config.GetFullSmtpBindingAddress())
+	log.Println("libmailslurper: INFO - SMTP listener running on", config.GetFullSMTPBindingAddress())
 	return net.ListenTCP("tcp", tcpAddress)
 }
 
@@ -62,12 +58,12 @@ and parser and the parser process is started. If the parsing is successful
 the MailItemStruct is added to a channel. An receivers passed in will be
 listening on that channel and may do with the mail item as they wish.
 */
-func Dispatch(serverPool ServerPool, handle net.Listener, receivers []receiver.IMailItemReceiver) {
+func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemReceiver) {
 	/*
 	 * Setup our receivers. These guys are basically subscribers to
 	 * the MailItem channel.
 	 */
-	mailItemChannel := make(chan mailitem.MailItem, 1000)
+	mailItemChannel := make(chan MailItem, 1000)
 	var worker *SmtpWorker
 
 	go func() {

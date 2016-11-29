@@ -40,7 +40,7 @@ func getVersionFromMaster(writer http.ResponseWriter, request *http.Request) {
 	var result *mailslurper.Version
 
 	if result, err = mailslurper.GetServerVersionFromMaster(); err != nil {
-		log.Errorf("Error getting version file from Github: %s", err.Error())
+		logger.Errorf("Error getting version file from Github: %s", err.Error())
 		httpService.WriteText(writer, "There was an error reading the version file from GitHub", 500)
 		return
 	}

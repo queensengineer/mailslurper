@@ -9,20 +9,20 @@ import (
 )
 
 type DatabaseReceiver struct {
-	database storage.IStorage
+	database IStorage
 }
 
-func NewDatabaseReceiver(database storage.IStorage) DatabaseReceiver {
+func NewDatabaseReceiver(database IStorage) DatabaseReceiver {
 	return DatabaseReceiver{
 		database: database,
 	}
 }
 
-func (this DatabaseReceiver) Receive(mailItem *MailItem) error {
+func (receiver DatabaseReceiver) Receive(mailItem *MailItem) error {
 	var err error
 	var newID string
 
-	if newID, err = this.database.StoreMail(mailItem); err != nil {
+	if newID, err = receiver.database.StoreMail(mailItem); err != nil {
 		log.Println("libmailslurper: ERROR - There was an error while storing your mail item:", err)
 		return err
 	}

@@ -24,6 +24,8 @@ _cgo_export.*
 _testmain.go
 
 *.exe
+cmd/mailslurper/debug
+cmd/mailslurper/mailslurper
 mail.db
 mailslurper.db
 www/assets/mailslurper/.DS_Store

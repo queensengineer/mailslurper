@@ -9,6 +9,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/mailslurper/libmailslurper/smtpconstants"
 )
 
 type SmtpReader struct {
@@ -29,9 +31,9 @@ func (this *SmtpReader) Read() string {
 	bytesRead = 1
 
 	for bytesRead > 0 {
-		this.Connection.SetReadDeadline(time.Now().Add(time.Millisecond * smtpconstants.CONN_TIMEOUT_MILLISECONDS))
+		this.Connection.SetReadDeadline(time.Now().Add(time.Millisecond * CONN_TIMEOUT_MILLISECONDS))
 
-		buffer := make([]byte, smtpconstants.RECEIVE_BUFFER_LEN)
+		buffer := make([]byte, RECEIVE_BUFFER_LEN)
 		bytesRead, err := this.Connection.Read(buffer)
 
 		if err != nil {
