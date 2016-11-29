@@ -20,6 +20,7 @@ deploy
 _cgo_defun.c
 _cgo_gotypes.go
 _cgo_export.*
+tmp.log
 
 _testmain.go
 
