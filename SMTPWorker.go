@@ -14,6 +14,10 @@ import (
 	"github.com/adampresley/webframework/sanitizer"
 )
 
+/*
+An SmtpWorker is responsible for executing, parsing, and processing a single
+TCP connection's email.
+*/
 type SmtpWorker struct {
 	Connection             net.Conn
 	EmailValidationService EmailValidationProvider
@@ -34,48 +38,52 @@ ExecuteCommand takes a command and the raw data read from the socket
 connection and executes the correct handler function to process
 the data and potentially respond to the client to continue SMTP negotiations.
 */
-func (this *SmtpWorker) ExecuteCommand(command SmtpCommand, streamInput string) error {
+func (smtpWorker *SmtpWorker) ExecuteCommand(command SmtpCommand, streamInput string) error {
 	var err error
 
 	var headers MailHeader
 	var body MailBody
 
 	streamInput = strings.TrimSpace(streamInput)
-	thisMailItem := this.SMTPMailItem.(*SMTPMailItem)
+	thisMailItem := smtpWorker.SMTPMailItem.(*SMTPMailItem)
 
 	switch command {
 	case HELO:
-		err = this.Process_HELO(streamInput)
+		err = smtpWorker.Process_HELO(streamInput)
 
 	case MAIL:
-		if err = this.Process_MAIL(streamInput); err != nil {
+		if err = smtpWorker.Process_MAIL(streamInput); err != nil {
 			log.Printf("libmailslurper: ERROR - Problem processing MAIL FROM: %s\n", err.Error())
 		} else {
 			log.Printf("libmailslurper: INFO - Mail from %s\n", thisMailItem.FromAddress)
 		}
 
+		smtpWorker.Mail.FromAddress = thisMailItem.FromAddress
+
 	case RCPT:
-		if err = this.Process_RCPT(streamInput); err != nil {
+		if err = smtpWorker.Process_RCPT(streamInput); err != nil {
 			log.Printf("libmailslurper: ERROR - Problem processing RCPT TO: %s\n", err.Error())
 		}
 
+		smtpWorker.Mail.ToAddresses = thisMailItem.ToAddresses
+
 	case DATA:
-		headers, body, err = this.Process_DATA(streamInput)
+		headers, body, err = smtpWorker.Process_DATA(streamInput)
 		if err != nil {
 			log.Println("libmailslurper: ERROR - Problem calling Process_DATA -", err)
 		} else {
 			if len(strings.TrimSpace(body.HTMLBody)) <= 0 {
-				this.Mail.Body = this.XSSService.SanitizeString(body.TextBody)
+				smtpWorker.Mail.Body = smtpWorker.XSSService.SanitizeString(body.TextBody)
 			} else {
-				this.Mail.Body = this.XSSService.SanitizeString(body.HTMLBody)
+				smtpWorker.Mail.Body = smtpWorker.XSSService.SanitizeString(body.HTMLBody)
 			}
 
-			this.Mail.Subject = this.XSSService.SanitizeString(headers.Subject)
-			this.Mail.DateSent = headers.Date
-			this.Mail.XMailer = this.XSSService.SanitizeString(headers.XMailer)
-			this.Mail.ContentType = this.XSSService.SanitizeString(headers.ContentType)
-			this.Mail.Boundary = headers.Boundary
-			this.Mail.Attachments = body.Attachments
+			smtpWorker.Mail.Subject = smtpWorker.XSSService.SanitizeString(headers.Subject)
+			smtpWorker.Mail.DateSent = headers.Date
+			smtpWorker.Mail.XMailer = smtpWorker.XSSService.SanitizeString(headers.XMailer)
+			smtpWorker.Mail.ContentType = smtpWorker.XSSService.SanitizeString(headers.ContentType)
+			smtpWorker.Mail.Boundary = headers.Boundary
+			smtpWorker.Mail.Attachments = body.Attachments
 		}
 
 	default:
@@ -86,13 +94,13 @@ func (this *SmtpWorker) ExecuteCommand(command SmtpCommand, streamInput string) 
 }
 
 /*
-Initializes the mail item structure that will eventually
+InitializeMailItem initializes the mail item structure that will eventually
 be written to the receiver channel.
 */
-func (this *SmtpWorker) InitializeMailItem() {
-	this.Mail.ToAddresses = make([]string, 0)
-	this.Mail.Attachments = make([]*Attachment, 0)
-	this.Mail.Message = NewSMTPMessagePart()
+func (smtpWorker *SmtpWorker) InitializeMailItem() {
+	smtpWorker.Mail.ToAddresses = make([]string, 0)
+	smtpWorker.Mail.Attachments = make([]*Attachment, 0)
+	smtpWorker.Mail.Message = NewSMTPMessagePart()
 
 	/*
 	 * IDs are generated ahead of time because
@@ -100,7 +108,7 @@ func (this *SmtpWorker) InitializeMailItem() {
 	 * get the mail item once it is retrieved from the TCP socket.
 	 */
 	id, _ := GenerateId()
-	this.Mail.ID = id
+	smtpWorker.Mail.ID = id
 }
 
 /*
@@ -128,23 +136,23 @@ func NewSmtpWorker(
 Prepare tells a worker about the TCP connection they will work
 with, the IO handlers, and sets their state.
 */
-func (this *SmtpWorker) Prepare(
+func (smtpWorker *SmtpWorker) Prepare(
 	connection net.Conn,
 	receiver chan MailItem,
 	reader SmtpReader,
 	writer SmtpWriter,
 ) {
-	this.State = SMTP_WORKER_WORKING
+	smtpWorker.State = SMTP_WORKER_WORKING
 
-	this.Connection = connection
-	this.Receiver = receiver
+	smtpWorker.Connection = connection
+	smtpWorker.Receiver = receiver
 
-	this.Reader = reader
-	this.Writer = writer
+	smtpWorker.Reader = reader
+	smtpWorker.Writer = writer
 }
 
 /*
-Function to process the DATA command (constant DATA). When a client sends the DATA
+Process_DATA processes the DATA command (constant DATA). When a client sends the DATA
 command there are three parts to the transmission content. Before this data
 can be processed this function will tell the client how to terminate the DATA block.
 We are asking clients to terminate with "\r\n.\r\n".
@@ -163,7 +171,7 @@ This function will return the following items.
 	2. Body breakdown (MailBody)
 	3. error structure
 */
-func (this *SmtpWorker) Process_DATA(streamInput string) (MailHeader, MailBody, error) {
+func (smtpWorker *SmtpWorker) Process_DATA(streamInput string) (MailHeader, MailBody, error) {
 	var err error
 
 	header := MailHeader{}
@@ -174,65 +182,68 @@ func (this *SmtpWorker) Process_DATA(streamInput string) (MailHeader, MailBody, 
 		return header, body, errors.New("Invalid command for DATA")
 	}
 
-	this.Writer.SendDataResponse()
-	entireMailContents := this.Reader.ReadDataBlock()
+	smtpWorker.Writer.SendDataResponse()
+	entireMailContents := smtpWorker.Reader.ReadDataBlock()
 
 	/*
 	 * Parse the header content
 	 */
 	if err = header.Parse(entireMailContents); err != nil {
-		this.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
+		smtpWorker.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
 		return header, body, err
 	}
 
 	/*
 		 * Parse the body. Send the
 		if err = body.Parse(entireMailContents, header.Boundary); err != nil {
-			this.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
+			smtpWorker.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
 			return header, body, err
 		}
 	*/
 
-	if err = this.Mail.Message.BuildMessages(entireMailContents); err != nil {
+	if err = smtpWorker.Mail.Message.BuildMessages(entireMailContents); err != nil {
 		log.Printf("libmailslurper: ERROR parsing message contents: %s", err.Error())
 	}
 
 	/*
-		t, _ := json.MarshalIndent(this.Mail.Message, "", "  ")
+		t, _ := json.MarshalIndent(smtpWorker.Mail.Message, "", "  ")
 		log.Printf("libmailslurper: INFO - Message Parts: %s", string(t))
 
-		log.Printf("Message: %s", this.Mail.Message.MessageParts[0].GetMessageParts()[1].GetBody())
+		log.Printf("Message: %s", smtpWorker.Mail.Message.MessageParts[0].GetMessageParts()[1].GetBody())
 	*/
 
-	if len(this.Mail.Message.MessageParts) > 0 {
-		this.recordMessagePart(this.Mail.Message.MessageParts[0])
+	if len(smtpWorker.Mail.Message.MessageParts) > 0 {
+		smtpWorker.recordMessagePart(smtpWorker.Mail.Message.MessageParts[0])
 	} else {
 		log.Printf("libmailslurper: ERROR - MessageParts has no parts!")
 	}
 
-	if this.Mail.HTMLBody != "" {
-		this.Mail.Body = this.Mail.HTMLBody
+	body.HTMLBody = smtpWorker.Mail.HTMLBody
+	body.TextBody = smtpWorker.Mail.TextBody
+
+	if smtpWorker.Mail.HTMLBody != "" {
+		smtpWorker.Mail.Body = smtpWorker.Mail.HTMLBody
 	} else {
-		this.Mail.Body = this.Mail.TextBody
+		smtpWorker.Mail.Body = smtpWorker.Mail.TextBody
 	}
 
-	this.Writer.SendOkResponse()
+	smtpWorker.Writer.SendOkResponse()
 	return header, body, nil
 }
 
-func (this *SmtpWorker) recordMessagePart(message ISMTPMessagePart) error {
-	if this.isMIMEType(message, "text/plain") && this.Mail.TextBody == "" && !this.messagePartIsAttachment(message) {
-		this.Mail.TextBody = message.GetBody()
+func (smtpWorker *SmtpWorker) recordMessagePart(message ISMTPMessagePart) error {
+	if smtpWorker.isMIMEType(message, "text/plain") && smtpWorker.Mail.TextBody == "" && !smtpWorker.messagePartIsAttachment(message) {
+		smtpWorker.Mail.TextBody = message.GetBody()
 	} else {
-		if this.isMIMEType(message, "text/html") && this.Mail.HTMLBody == "" && !this.messagePartIsAttachment(message) {
-			this.Mail.HTMLBody = message.GetBody()
+		if smtpWorker.isMIMEType(message, "text/html") && smtpWorker.Mail.HTMLBody == "" && !smtpWorker.messagePartIsAttachment(message) {
+			smtpWorker.Mail.HTMLBody = message.GetBody()
 		} else {
-			if this.isMIMEType(message, "multipart") {
+			if smtpWorker.isMIMEType(message, "multipart") {
 				for _, m := range message.GetMessageParts() {
-					this.recordMessagePart(m)
+					smtpWorker.recordMessagePart(m)
 				}
 			} else {
-				this.addAttachment(message)
+				smtpWorker.addAttachment(message)
 			}
 		}
 	}
@@ -240,15 +251,15 @@ func (this *SmtpWorker) recordMessagePart(message ISMTPMessagePart) error {
 	return nil
 }
 
-func (this *SmtpWorker) isMIMEType(messagePart ISMTPMessagePart, mimeType string) bool {
+func (smtpWorker *SmtpWorker) isMIMEType(messagePart ISMTPMessagePart, mimeType string) bool {
 	return strings.HasPrefix(messagePart.GetContentType(), mimeType)
 }
 
-func (this *SmtpWorker) messagePartIsAttachment(messagePart ISMTPMessagePart) bool {
+func (smtpWorker *SmtpWorker) messagePartIsAttachment(messagePart ISMTPMessagePart) bool {
 	return strings.Contains(messagePart.GetContentDisposition(), "attachment")
 }
 
-func (this *SmtpWorker) addAttachment(messagePart ISMTPMessagePart) error {
+func (smtpWorker *SmtpWorker) addAttachment(messagePart ISMTPMessagePart) error {
 	headers := &AttachmentHeader{
 		ContentType:             messagePart.GetHeader("Content-Type"),
 		MIMEVersion:             messagePart.GetHeader("MIME-Version"),
@@ -261,21 +272,21 @@ func (this *SmtpWorker) addAttachment(messagePart ISMTPMessagePart) error {
 
 	attachment := NewAttachment(headers, messagePart.GetBody())
 
-	if this.messagePartIsAttachment(messagePart) {
-		this.Mail.Attachments = append(this.Mail.Attachments, attachment)
+	if smtpWorker.messagePartIsAttachment(messagePart) {
+		smtpWorker.Mail.Attachments = append(smtpWorker.Mail.Attachments, attachment)
 	} else {
-		this.Mail.InlineAttachments = append(this.Mail.InlineAttachments, attachment)
+		smtpWorker.Mail.InlineAttachments = append(smtpWorker.Mail.InlineAttachments, attachment)
 	}
 
 	return nil
 }
 
 /*
-Function to process the HELO and EHLO SMTP commands. This command
+Process_HELO processes the HELO and EHLO SMTP commands. This command
 responds to clients with a 250 greeting code and returns success
 or false and an error message (if any).
 */
-func (this *SmtpWorker) Process_HELO(streamInput string) error {
+func (smtpWorker *SmtpWorker) Process_HELO(streamInput string) error {
 	lowercaseStreamInput := strings.ToLower(streamInput)
 
 	commandCheck := (strings.Index(lowercaseStreamInput, "helo") + 1) + (strings.Index(lowercaseStreamInput, "ehlo") + 1)
@@ -288,7 +299,7 @@ func (this *SmtpWorker) Process_HELO(streamInput string) error {
 		return errors.New("HELO command format is invalid")
 	}
 
-	return this.Writer.SendHELOResponse()
+	return smtpWorker.Writer.SendHELOResponse()
 }
 
 /*
@@ -296,14 +307,14 @@ Process_MAIL processes the MAIL FROM command (constant MAIL). This command
 will respond to clients with 250 Ok response and returns an error
 that may have occurred as well as the parsed FROM.
 */
-func (this *SmtpWorker) Process_MAIL(streamInput string) error {
+func (smtpWorker *SmtpWorker) Process_MAIL(streamInput string) error {
 	var err error
 
-	if err = this.SMTPMailItem.ProcessFrom(streamInput); err != nil {
+	if err = smtpWorker.SMTPMailItem.ProcessFrom(streamInput); err != nil {
 		return err
 	}
 
-	this.Writer.SendOkResponse()
+	smtpWorker.Writer.SendOkResponse()
 	return nil
 }
 
@@ -313,34 +324,34 @@ will respond to clients with a 250 Ok response and returns an error structre
 and a string containing the recipients address. Note that a client
 can send one or more RCPT TO commands.
 */
-func (this *SmtpWorker) Process_RCPT(streamInput string) error {
+func (smtpWorker *SmtpWorker) Process_RCPT(streamInput string) error {
 	var err error
 
-	if err = this.SMTPMailItem.ProcessRecipient(streamInput); err != nil {
+	if err = smtpWorker.SMTPMailItem.ProcessRecipient(streamInput); err != nil {
 		return err
 	}
 
-	this.Writer.SendOkResponse()
+	smtpWorker.Writer.SendOkResponse()
 	return nil
 }
 
-func (this *SmtpWorker) rejoinWorkerQueue() {
-	this.pool.JoinQueue(this)
+func (smtpWorker *SmtpWorker) rejoinWorkerQueue() {
+	smtpWorker.pool.JoinQueue(smtpWorker)
 }
 
 /*
-This is the function called by the SmtpListener when a client request
+Work is the function called by the SmtpListener when a client request
 is received. This will start the process by responding to the client,
 start processing commands, and finally close the connection.
 */
-func (this *SmtpWorker) Work() {
+func (smtpWorker *SmtpWorker) Work() {
 	go func() {
 		var streamInput string
 		var command SmtpCommand
 		var err error
 
-		this.InitializeMailItem()
-		this.Writer.SayHello()
+		smtpWorker.InitializeMailItem()
+		smtpWorker.Writer.SayHello()
 
 		/*
 		 * Read from the connection until we receive a QUIT command
@@ -348,51 +359,51 @@ func (this *SmtpWorker) Work() {
 		 */
 		startTime := time.Now()
 
-		for this.State != SMTP_WORKER_DONE && this.State != SMTP_WORKER_ERROR {
-			streamInput = this.Reader.Read()
+		for smtpWorker.State != SMTP_WORKER_DONE && smtpWorker.State != SMTP_WORKER_ERROR {
+			streamInput = smtpWorker.Reader.Read()
 			command, err = GetCommandFromString(streamInput)
 
 			if err != nil {
 				log.Println("libmailslurper: ERROR finding command from input", streamInput, "-", err)
-				this.State = SMTP_WORKER_ERROR
+				smtpWorker.State = SMTP_WORKER_ERROR
 				continue
 			}
 
 			if command == QUIT {
-				this.State = SMTP_WORKER_DONE
+				smtpWorker.State = SMTP_WORKER_DONE
 				log.Println("libmailslurper: INFO - Closing connection")
 			} else {
-				err = this.ExecuteCommand(command, streamInput)
+				err = smtpWorker.ExecuteCommand(command, streamInput)
 				if err != nil {
-					this.State = SMTP_WORKER_ERROR
+					smtpWorker.State = SMTP_WORKER_ERROR
 					log.Println("libmailslurper: ERROR - Error executing command", command.String())
 					continue
 				}
 			}
 
-			if this.TimeoutHasExpired(startTime) {
+			if smtpWorker.TimeoutHasExpired(startTime) {
 				log.Println("libmailslurper: INFO - Connection timeout. Terminating client connection")
-				this.State = SMTP_WORKER_ERROR
+				smtpWorker.State = SMTP_WORKER_ERROR
 				continue
 			}
 		}
 
-		this.Writer.SayGoodbye()
-		this.Connection.Close()
+		smtpWorker.Writer.SayGoodbye()
+		smtpWorker.Connection.Close()
 
-		if this.State != SMTP_WORKER_ERROR {
-			this.Receiver <- this.Mail
+		if smtpWorker.State != SMTP_WORKER_ERROR {
+			smtpWorker.Receiver <- smtpWorker.Mail
 		}
 
-		this.State = SMTP_WORKER_IDLE
-		this.rejoinWorkerQueue()
+		smtpWorker.State = SMTP_WORKER_IDLE
+		smtpWorker.rejoinWorkerQueue()
 	}()
 }
 
 /*
-Determines if the time elapsed since a start time has exceeded
+TimeoutHasExpired determines if the time elapsed since a start time has exceeded
 the command timeout.
 */
-func (this *SmtpWorker) TimeoutHasExpired(startTime time.Time) bool {
+func (smtpWorker *SmtpWorker) TimeoutHasExpired(startTime time.Time) bool {
 	return int(time.Since(startTime).Seconds()) > COMMAND_TIMEOUT_SECONDS
 }
