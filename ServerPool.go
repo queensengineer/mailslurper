@@ -17,12 +17,12 @@ ServerPool represents a pool of SMTP workers. This will
 manage how many workers may respond to SMTP client requests
 and allocation of those workers.
 */
-type ServerPool chan *SmtpWorker
+type ServerPool chan *SMTPWorker
 
 /*
 JoinQueue adds a worker to the queue.
 */
-func (pool ServerPool) JoinQueue(worker *SmtpWorker) {
+func (pool ServerPool) JoinQueue(worker *SMTPWorker) {
 	pool <- worker
 }
 
@@ -38,7 +38,7 @@ func NewServerPool(maxWorkers int) ServerPool {
 	pool := make(ServerPool, maxWorkers)
 
 	for index := 0; index < maxWorkers; index++ {
-		pool.JoinQueue(NewSmtpWorker(
+		pool.JoinQueue(NewSMTPWorker(
 			index+1,
 			pool,
 			emailValidationService,
@@ -54,23 +54,20 @@ func NewServerPool(maxWorkers int) ServerPool {
 NextWorker retrieves the next available worker from
 the queue.
 */
-func (pool ServerPool) NextWorker(connection net.Conn, receiver chan MailItem) (*SmtpWorker, error) {
-	/*
-	 * TODO: This blocks until a worker is available. Perhaps implement a timeout?
-	 */
+func (pool ServerPool) NextWorker(connection net.Conn, receiver chan MailItem) (*SMTPWorker, error) {
 	select {
 	case worker := <-pool:
 		worker.Prepare(
 			connection,
 			receiver,
-			SmtpReader{Connection: connection},
-			SmtpWriter{Connection: connection},
+			SMTPReader{Connection: connection},
+			SMTPWriter{Connection: connection},
 		)
 
-		log.Println("libmailslurper: INFO - Worker", worker.WorkerId, "queued to handle connection from", connection.RemoteAddr().String())
+		log.Println("libmailslurper: INFO - Worker", worker.WorkerID, "queued to handle connection from", connection.RemoteAddr().String())
 		return worker, nil
 
 	case <-time.After(time.Second * 2):
-		return &SmtpWorker{}, NoWorkerAvailable()
+		return &SMTPWorker{}, NoWorkerAvailable()
 	}
 }

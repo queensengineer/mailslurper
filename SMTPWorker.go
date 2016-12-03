@@ -6,8 +6,10 @@ package mailslurper
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -15,19 +17,18 @@ import (
 )
 
 /*
-An SmtpWorker is responsible for executing, parsing, and processing a single
+An SMTPWorker is responsible for executing, parsing, and processing a single
 TCP connection's email.
 */
-type SmtpWorker struct {
+type SMTPWorker struct {
 	Connection             net.Conn
 	EmailValidationService EmailValidationProvider
 	Mail                   MailItem
-	Reader                 SmtpReader
+	Reader                 SMTPReader
 	Receiver               chan MailItem
-	SMTPMailItem           ISMTPMailItem
-	State                  SmtpWorkerState
-	WorkerId               int
-	Writer                 SmtpWriter
+	State                  SMTPWorkerState
+	WorkerID               int
+	Writer                 SMTPWriter
 	XSSService             sanitizer.IXSSServiceProvider
 
 	pool ServerPool
@@ -38,14 +39,13 @@ ExecuteCommand takes a command and the raw data read from the socket
 connection and executes the correct handler function to process
 the data and potentially respond to the client to continue SMTP negotiations.
 */
-func (smtpWorker *SmtpWorker) ExecuteCommand(command SmtpCommand, streamInput string) error {
+func (smtpWorker *SMTPWorker) ExecuteCommand(command SMTPCommand, streamInput string) error {
 	var err error
 
 	var headers MailHeader
 	var body MailBody
 
 	streamInput = strings.TrimSpace(streamInput)
-	thisMailItem := smtpWorker.SMTPMailItem.(*SMTPMailItem)
 
 	switch command {
 	case HELO:
@@ -55,17 +55,13 @@ func (smtpWorker *SmtpWorker) ExecuteCommand(command SmtpCommand, streamInput st
 		if err = smtpWorker.Process_MAIL(streamInput); err != nil {
 			log.Printf("libmailslurper: ERROR - Problem processing MAIL FROM: %s\n", err.Error())
 		} else {
-			log.Printf("libmailslurper: INFO - Mail from %s\n", thisMailItem.FromAddress)
+			log.Printf("libmailslurper: INFO - Mail from %s\n", smtpWorker.Mail.FromAddress)
 		}
-
-		smtpWorker.Mail.FromAddress = thisMailItem.FromAddress
 
 	case RCPT:
 		if err = smtpWorker.Process_RCPT(streamInput); err != nil {
 			log.Printf("libmailslurper: ERROR - Problem processing RCPT TO: %s\n", err.Error())
 		}
-
-		smtpWorker.Mail.ToAddresses = thisMailItem.ToAddresses
 
 	case DATA:
 		headers, body, err = smtpWorker.Process_DATA(streamInput)
@@ -97,7 +93,7 @@ func (smtpWorker *SmtpWorker) ExecuteCommand(command SmtpCommand, streamInput st
 InitializeMailItem initializes the mail item structure that will eventually
 be written to the receiver channel.
 */
-func (smtpWorker *SmtpWorker) InitializeMailItem() {
+func (smtpWorker *SMTPWorker) InitializeMailItem() {
 	smtpWorker.Mail.ToAddresses = make([]string, 0)
 	smtpWorker.Mail.Attachments = make([]*Attachment, 0)
 	smtpWorker.Mail.Message = NewSMTPMessagePart()
@@ -107,24 +103,23 @@ func (smtpWorker *SmtpWorker) InitializeMailItem() {
 	 * we do not know what order recievers
 	 * get the mail item once it is retrieved from the TCP socket.
 	 */
-	id, _ := GenerateId()
+	id, _ := GenerateID()
 	smtpWorker.Mail.ID = id
 }
 
 /*
-NewSmtpWorker creates a new SMTP worker. An SMTP worker is
+NewSMTPWorker creates a new SMTP worker. An SMTP worker is
 responsible for parsing and working with SMTP mail data.
 */
-func NewSmtpWorker(
+func NewSMTPWorker(
 	workerID int,
 	pool ServerPool,
 	emailValidationService EmailValidationProvider,
 	xssService sanitizer.IXSSServiceProvider,
-) *SmtpWorker {
-	return &SmtpWorker{
+) *SMTPWorker {
+	return &SMTPWorker{
 		EmailValidationService: emailValidationService,
-		WorkerId:               workerID,
-		SMTPMailItem:           NewSMTPMailItem(emailValidationService, xssService),
+		WorkerID:               workerID,
 		State:                  SMTP_WORKER_IDLE,
 		XSSService:             xssService,
 
@@ -133,14 +128,100 @@ func NewSmtpWorker(
 }
 
 /*
+ParseMailHeader, given an entire mail transmission this method parses a set of mail headers.
+It will split lines up and figures out what header data goes into what
+structure key. Most headers follow this format:
+
+Header-Name: Some value here\r\n
+
+However some headers, such as Content-Type, may have additional information,
+especially when the content type is a multipart and there are attachments.
+Then it can look like this:
+
+Content-Type: multipart/mixed; boundary="==abcsdfdfd=="\r\n
+*/
+func (smtpWorker *SMTPWorker) ParseMailHeader(contents string) error {
+	var key string
+
+	smtpWorker.Mail.XMailer = "MailSlurper!"
+	smtpWorker.Mail.Boundary = ""
+
+	/*
+	 * Split the DATA content by CRLF CRLF. The first item will be the data
+	 * headers. Everything past that is body/message.
+	 */
+	headerBodySplit := strings.Split(contents, "\r\n\r\n")
+	if len(headerBodySplit) < 2 {
+		return fmt.Errorf("Expected DATA block to contain a header section and a body section")
+	}
+
+	contents = headerBodySplit[0]
+
+	/*
+	 * Unfold and split the header into lines. Loop over each line
+	 * and figure out what headers are present. Store them.
+	 * Sadly some headers require special processing.
+	 */
+	contents = UnfoldHeaders(contents)
+	splitHeader := strings.Split(contents, "\r\n")
+	numLines := len(splitHeader)
+
+	for index := 0; index < numLines; index++ {
+		splitItem := strings.Split(splitHeader[index], ":")
+		key = splitItem[0]
+
+		switch strings.ToLower(key) {
+		case "content-type":
+			contentType := strings.Join(splitItem[1:], "")
+			contentTypeSplit := strings.Split(contentType, ";")
+
+			smtpWorker.Mail.ContentType = strings.TrimSpace(contentTypeSplit[0])
+			log.Println("libmailslurper: INFO - Mail Content-Type: ", smtpWorker.Mail.ContentType)
+
+			/*
+			 * Check to see if we have a boundary marker
+			 */
+			if len(contentTypeSplit) > 1 {
+				contentTypeRightSide := strings.Join(contentTypeSplit[1:], ";")
+
+				if strings.Contains(strings.ToLower(contentTypeRightSide), "boundary") {
+					boundarySplit := strings.Split(contentTypeRightSide, "=")
+					smtpWorker.Mail.Boundary = strings.Replace(strings.Join(boundarySplit[1:], "="), "\"", "", -1)
+
+					log.Println("libmailslurper: INFO - Mail Boundary: ", smtpWorker.Mail.Boundary)
+				}
+			}
+
+		case "date":
+			smtpWorker.Mail.DateSent = ParseDateTime(strings.Join(splitItem[1:], ":"))
+			log.Println("libmailslurper: INFO - Mail Date: ", smtpWorker.Mail.DateSent)
+
+		case "mime-version":
+			smtpWorker.Mail.MIMEVersion = strings.TrimSpace(strings.Join(splitItem[1:], ""))
+			log.Println("libmailslurper: INFO - Mail MIME-Version: ", smtpWorker.Mail.MIMEVersion)
+
+		case "subject":
+			smtpWorker.Mail.Subject = strings.TrimSpace(strings.Join(splitItem[1:], ""))
+			if smtpWorker.Mail.Subject == "" {
+				smtpWorker.Mail.Subject = "(No Subject)"
+			}
+
+			log.Println("libmailslurper: INFO - Mail Subject: ", smtpWorker.Mail.Subject)
+		}
+	}
+
+	return nil
+}
+
+/*
 Prepare tells a worker about the TCP connection they will work
 with, the IO handlers, and sets their state.
 */
-func (smtpWorker *SmtpWorker) Prepare(
+func (smtpWorker *SMTPWorker) Prepare(
 	connection net.Conn,
 	receiver chan MailItem,
-	reader SmtpReader,
-	writer SmtpWriter,
+	reader SMTPReader,
+	writer SMTPWriter,
 ) {
 	smtpWorker.State = SMTP_WORKER_WORKING
 
@@ -171,7 +252,7 @@ This function will return the following items.
 	2. Body breakdown (MailBody)
 	3. error structure
 */
-func (smtpWorker *SmtpWorker) Process_DATA(streamInput string) (MailHeader, MailBody, error) {
+func (smtpWorker *SMTPWorker) Process_DATA(streamInput string) (MailHeader, MailBody, error) {
 	var err error
 
 	header := MailHeader{}
@@ -224,7 +305,7 @@ func (smtpWorker *SmtpWorker) Process_DATA(streamInput string) (MailHeader, Mail
 	return header, body, nil
 }
 
-func (smtpWorker *SmtpWorker) recordMessagePart(message ISMTPMessagePart) error {
+func (smtpWorker *SMTPWorker) recordMessagePart(message ISMTPMessagePart) error {
 	if smtpWorker.isMIMEType(message, "text/plain") && smtpWorker.Mail.TextBody == "" && !smtpWorker.messagePartIsAttachment(message) {
 		smtpWorker.Mail.TextBody = message.GetBody()
 	} else {
@@ -244,15 +325,15 @@ func (smtpWorker *SmtpWorker) recordMessagePart(message ISMTPMessagePart) error 
 	return nil
 }
 
-func (smtpWorker *SmtpWorker) isMIMEType(messagePart ISMTPMessagePart, mimeType string) bool {
+func (smtpWorker *SMTPWorker) isMIMEType(messagePart ISMTPMessagePart, mimeType string) bool {
 	return strings.HasPrefix(messagePart.GetContentType(), mimeType)
 }
 
-func (smtpWorker *SmtpWorker) messagePartIsAttachment(messagePart ISMTPMessagePart) bool {
+func (smtpWorker *SMTPWorker) messagePartIsAttachment(messagePart ISMTPMessagePart) bool {
 	return strings.Contains(messagePart.GetContentDisposition(), "attachment")
 }
 
-func (smtpWorker *SmtpWorker) addAttachment(messagePart ISMTPMessagePart) error {
+func (smtpWorker *SMTPWorker) addAttachment(messagePart ISMTPMessagePart) error {
 	headers := &AttachmentHeader{
 		ContentType:             messagePart.GetHeader("Content-Type"),
 		MIMEVersion:             messagePart.GetHeader("MIME-Version"),
@@ -279,7 +360,7 @@ Process_HELO processes the HELO and EHLO SMTP commands. This command
 responds to clients with a 250 greeting code and returns success
 or false and an error message (if any).
 */
-func (smtpWorker *SmtpWorker) Process_HELO(streamInput string) error {
+func (smtpWorker *SMTPWorker) Process_HELO(streamInput string) error {
 	lowercaseStreamInput := strings.ToLower(streamInput)
 
 	commandCheck := (strings.Index(lowercaseStreamInput, "helo") + 1) + (strings.Index(lowercaseStreamInput, "ehlo") + 1)
@@ -300,10 +381,10 @@ Process_MAIL processes the MAIL FROM command (constant MAIL). This command
 will respond to clients with 250 Ok response and returns an error
 that may have occurred as well as the parsed FROM.
 */
-func (smtpWorker *SmtpWorker) Process_MAIL(streamInput string) error {
+func (smtpWorker *SMTPWorker) Process_MAIL(streamInput string) error {
 	var err error
 
-	if err = smtpWorker.SMTPMailItem.ProcessFrom(streamInput); err != nil {
+	if err = smtpWorker.ProcessFrom(streamInput); err != nil {
 		return err
 	}
 
@@ -317,10 +398,10 @@ will respond to clients with a 250 Ok response and returns an error structre
 and a string containing the recipients address. Note that a client
 can send one or more RCPT TO commands.
 */
-func (smtpWorker *SmtpWorker) Process_RCPT(streamInput string) error {
+func (smtpWorker *SMTPWorker) Process_RCPT(streamInput string) error {
 	var err error
 
-	if err = smtpWorker.SMTPMailItem.ProcessRecipient(streamInput); err != nil {
+	if err = smtpWorker.ProcessRecipient(streamInput); err != nil {
 		return err
 	}
 
@@ -328,7 +409,69 @@ func (smtpWorker *SmtpWorker) Process_RCPT(streamInput string) error {
 	return nil
 }
 
-func (smtpWorker *SmtpWorker) rejoinWorkerQueue() {
+/*
+ProcessFrom takes the input stream and stores the sender email address. If there
+is an error it is returned.
+*/
+func (smtpWorker *SMTPWorker) ProcessFrom(streamInput string) error {
+	var err error
+	var from string
+	var fromComponents *mail.Address
+
+	if err = IsValidCommand(streamInput, "MAIL FROM"); err != nil {
+		return err
+	}
+
+	if from, err = GetCommandValue(streamInput, "MAIL FROM", ":"); err != nil {
+		return err
+	}
+
+	if fromComponents, err = smtpWorker.EmailValidationService.GetEmailComponents(from); err != nil {
+		return InvalidEmail(from)
+	}
+
+	from = smtpWorker.XSSService.SanitizeString(fromComponents.Address)
+
+	if !smtpWorker.EmailValidationService.IsValidEmail(from) {
+		return InvalidEmail(from)
+	}
+
+	smtpWorker.Mail.FromAddress = from
+	return nil
+}
+
+/*
+ProcessRecipient takes the input stream and stores the intended recipient(s). If there
+is an error it is returned.
+*/
+func (smtpWorker *SMTPWorker) ProcessRecipient(streamInput string) error {
+	var err error
+	var to string
+	var toComponents *mail.Address
+
+	if err = IsValidCommand(streamInput, "RCPT TO"); err != nil {
+		return err
+	}
+
+	if to, err = GetCommandValue(streamInput, "RCPT TO", ":"); err != nil {
+		return err
+	}
+
+	if toComponents, err = smtpWorker.EmailValidationService.GetEmailComponents(to); err != nil {
+		return InvalidEmail(to)
+	}
+
+	to = smtpWorker.XSSService.SanitizeString(toComponents.Address)
+
+	if !smtpWorker.EmailValidationService.IsValidEmail(to) {
+		return InvalidEmail(to)
+	}
+
+	smtpWorker.Mail.ToAddresses = append(smtpWorker.Mail.ToAddresses, to)
+	return nil
+}
+
+func (smtpWorker *SMTPWorker) rejoinWorkerQueue() {
 	smtpWorker.pool.JoinQueue(smtpWorker)
 }
 
@@ -337,10 +480,10 @@ Work is the function called by the SmtpListener when a client request
 is received. This will start the process by responding to the client,
 start processing commands, and finally close the connection.
 */
-func (smtpWorker *SmtpWorker) Work() {
+func (smtpWorker *SMTPWorker) Work() {
 	go func() {
 		var streamInput string
-		var command SmtpCommand
+		var command SMTPCommand
 		var err error
 
 		smtpWorker.InitializeMailItem()
@@ -397,6 +540,6 @@ func (smtpWorker *SmtpWorker) Work() {
 TimeoutHasExpired determines if the time elapsed since a start time has exceeded
 the command timeout.
 */
-func (smtpWorker *SmtpWorker) TimeoutHasExpired(startTime time.Time) bool {
+func (smtpWorker *SMTPWorker) TimeoutHasExpired(startTime time.Time) bool {
 	return int(time.Since(startTime).Seconds()) > COMMAND_TIMEOUT_SECONDS
 }

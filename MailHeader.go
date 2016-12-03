@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-
-	"github.com/mailslurper/libmailslurper/datetime"
 )
 
 type MailHeader struct {
@@ -33,7 +31,7 @@ func NewMailHeader(contentType, boundary, mimeVersion, subject, date, xMailer st
 }
 
 /*
-Given an entire mail transmission this method parses a set of mail headers.
+ParseMailHeader, given an entire mail transmission this method parses a set of mail headers.
 It will split lines up and figures out what header data goes into what
 structure key. Most headers follow this format:
 
@@ -98,7 +96,7 @@ func (this *MailHeader) Parse(contents string) error {
 			}
 
 		case "date":
-			this.Date = datetime.ParseDateTime(strings.Join(splitItem[1:], ":"))
+			this.Date = ParseDateTime(strings.Join(splitItem[1:], ":"))
 			log.Println("libmailslurper: INFO - Mail Date: ", this.Date)
 
 		case "mime-version":

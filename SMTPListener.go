@@ -64,7 +64,7 @@ func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemR
 	 * the MailItem channel.
 	 */
 	mailItemChannel := make(chan MailItem, 1000)
-	var worker *SmtpWorker
+	var worker *SMTPWorker
 
 	go func() {
 		log.Println("libmailslurper: INFO -", len(receivers), "receiver(s) listening")

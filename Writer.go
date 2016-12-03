@@ -10,25 +10,29 @@ import (
 	"time"
 )
 
-type SmtpWriter struct {
+/*
+An SMTPWriter is a simple object for writing commands and responses
+to a client connected on a TCP socket
+*/
+type SMTPWriter struct {
 	Connection net.Conn
 }
 
 /*
-Function to tell a client that we are done communicating. This sends
+SayGoodbye tells a client that we are done communicating. This sends
 a 221 response. It returns true/false for success and a string
 with any response.
 */
-func (this *SmtpWriter) SayGoodbye() error {
-	return this.SendResponse(SMTP_CLOSING_MESSAGE)
+func (smtpWriter *SMTPWriter) SayGoodbye() error {
+	return smtpWriter.SendResponse(SMTP_CLOSING_MESSAGE)
 }
 
 /*
-Sends a hello message to a new client. The SMTP protocol
+SayHello sends a hello message to a new client. The SMTP protocol
 dictates that you must be polite. :)
 */
-func (this *SmtpWriter) SayHello() error {
-	err := this.SendResponse(SMTP_WELCOME_MESSAGE)
+func (smtpWriter *SMTPWriter) SayHello() error {
+	err := smtpWriter.SendResponse(SMTP_WELCOME_MESSAGE)
 	if err != nil {
 		return err
 	}
@@ -37,29 +41,38 @@ func (this *SmtpWriter) SayHello() error {
 	return nil
 }
 
-func (this *SmtpWriter) SendDataResponse() error {
-	return this.SendResponse(SMTP_DATA_RESPONSE_MESSAGE)
+/*
+SendDataResponse is a function to send a DATA response message
+*/
+func (smtpWriter *SMTPWriter) SendDataResponse() error {
+	return smtpWriter.SendResponse(SMTP_DATA_RESPONSE_MESSAGE)
 }
 
 /*
-Function to send a response to a client connection. It returns true/false for success and a string
+SendResponse sends a response to a client connection. It returns true/false for success and a string
 with any response.
 */
-func (this *SmtpWriter) SendResponse(response string) error {
+func (smtpWriter *SMTPWriter) SendResponse(response string) error {
 	var err error
 
-	if err = this.Connection.SetWriteDeadline(time.Now().Add(time.Second * 2)); err != nil {
+	if err = smtpWriter.Connection.SetWriteDeadline(time.Now().Add(time.Second * 2)); err != nil {
 		log.Printf("Error setting write deadline: %s", err.Error())
 	}
 
-	_, err = this.Connection.Write([]byte(string(response + SMTP_CRLF)))
+	_, err = smtpWriter.Connection.Write([]byte(string(response + SMTP_CRLF)))
 	return err
 }
 
-func (this *SmtpWriter) SendHELOResponse() error {
-	return this.SendResponse(SMTP_HELLO_RESPONSE_MESSAGE)
+/*
+SendHELOResponse sends a HELO message to a client
+*/
+func (smtpWriter *SMTPWriter) SendHELOResponse() error {
+	return smtpWriter.SendResponse(SMTP_HELLO_RESPONSE_MESSAGE)
 }
 
-func (this *SmtpWriter) SendOkResponse() error {
-	return this.SendResponse(SMTP_OK_MESSAGE)
+/*
+SendOkResponse sends an OK to a client
+*/
+func (smtpWriter *SMTPWriter) SendOkResponse() error {
+	return smtpWriter.SendResponse(SMTP_OK_MESSAGE)
 }

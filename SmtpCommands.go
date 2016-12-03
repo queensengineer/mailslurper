@@ -9,29 +9,32 @@ import (
 	"strings"
 )
 
-type SmtpCommand int
+/*
+An SMTPCommand represents a command issued over a TCP connection
+*/
+type SMTPCommand int
 
 /*
 Constants representing the commands that an SMTP client will
 send during the course of communicating with our server.
 */
 const (
-	NONE SmtpCommand = iota
-	RCPT SmtpCommand = iota
-	MAIL SmtpCommand = iota
-	HELO SmtpCommand = iota
-	RSET SmtpCommand = iota
-	DATA SmtpCommand = iota
-	QUIT SmtpCommand = iota
+	NONE SMTPCommand = iota
+	RCPT SMTPCommand = iota
+	MAIL SMTPCommand = iota
+	HELO SMTPCommand = iota
+	RSET SMTPCommand = iota
+	DATA SMTPCommand = iota
+	QUIT SMTPCommand = iota
 )
 
 /*
-This is a command map of SMTP command strings to their int
+SMTPCommands is a map of SMTP command strings to their int
 representation. This is primarily used because there can
 be more than one command to do the same things. For example,
 a client can send "helo" or "ehlo" to initiate the handshake.
 */
-var SmtpCommands = map[string]SmtpCommand{
+var SMTPCommands = map[string]SMTPCommand{
 	"helo":      HELO,
 	"ehlo":      HELO,
 	"rcpt to":   RCPT,
@@ -43,10 +46,10 @@ var SmtpCommands = map[string]SmtpCommand{
 }
 
 /*
-Friendly string representations of commands. Useful in error
+SMTPCommandsToStrings is a friendly string representations of commands. Useful in error
 reporting.
 */
-var SmtpCommandsToStrings = map[SmtpCommand]string{
+var SMTPCommandsToStrings = map[SMTPCommand]string{
 	HELO: "HELO",
 	RCPT: "RCPT TO",
 	MAIL: "SEND",
@@ -56,17 +59,17 @@ var SmtpCommandsToStrings = map[SmtpCommand]string{
 }
 
 /*
-Takes a string and returns the integer command representation. For example
+GetCommandFromString takes a string and returns the integer command representation. For example
 if the string contains "DATA" then the value 1 (the constant DATA) will be returned.
 */
-func GetCommandFromString(input string) (SmtpCommand, error) {
+func GetCommandFromString(input string) (SMTPCommand, error) {
 	result := NONE
 
 	if input == "" {
 		return result, nil
 	}
 
-	for key, value := range SmtpCommands {
+	for key, value := range SMTPCommands {
 		if strings.Index(strings.ToLower(input), key) == 0 {
 			result = value
 			break
@@ -83,6 +86,6 @@ func GetCommandFromString(input string) (SmtpCommand, error) {
 /*
 Returns the string representation of a command.
 */
-func (this SmtpCommand) String() string {
-	return SmtpCommandsToStrings[this]
+func (smtpCommand SMTPCommand) String() string {
+	return SMTPCommandsToStrings[smtpCommand]
 }

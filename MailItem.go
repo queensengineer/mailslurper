@@ -16,6 +16,7 @@ type MailItem struct {
 	ToAddresses []string      `json:"toAddresses"`
 	Subject     string        `json:"subject"`
 	XMailer     string        `json:"xmailer"`
+	MIMEVersion string        `json:"mimeVersion"`
 	Body        string        `json:"body"`
 	ContentType string        `json:"contentType"`
 	Boundary    string        `json:"boundary"`

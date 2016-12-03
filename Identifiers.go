@@ -11,7 +11,7 @@ import (
 /*
 Generate a UUID ID for database records.
 */
-func GenerateId() (string, error) {
+func GenerateID() (string, error) {
 	id, err := uuid.NewV4()
 	return id.String(), err
 }

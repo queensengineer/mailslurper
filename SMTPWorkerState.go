@@ -4,13 +4,18 @@
 
 package mailslurper
 
-type SmtpWorkerState int
+/*
+SMTPWorkerState defines states that a worker may be in. Typically
+a worker starts IDLE, the moves to WORKING, finally going to
+either DONE or ERROR.
+*/
+type SMTPWorkerState int
 
 const (
-	SMTP_WORKER_IDLE    SmtpWorkerState = 0
-	SMTP_WORKER_WORKING SmtpWorkerState = 1
-	SMTP_WORKER_DONE    SmtpWorkerState = 100
-	SMTP_WORKER_ERROR   SmtpWorkerState = 101
+	SMTP_WORKER_IDLE    SMTPWorkerState = 0
+	SMTP_WORKER_WORKING SMTPWorkerState = 1
+	SMTP_WORKER_DONE    SMTPWorkerState = 100
+	SMTP_WORKER_ERROR   SMTPWorkerState = 101
 
 	RECEIVE_BUFFER_LEN        = 1024
 	CONN_TIMEOUT_MILLISECONDS = 5

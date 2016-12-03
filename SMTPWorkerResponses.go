@@ -4,6 +4,9 @@
 
 package mailslurper
 
+/*
+Responses that are sent to SMTP clients
+*/
 const (
 	SMTP_CRLF                     string = "\r\n"
 	SMTP_DATA_TERMINATOR          string = "\r\n.\r\n"

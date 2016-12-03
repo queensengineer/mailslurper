@@ -70,8 +70,6 @@ func (messagePart *SMTPMessagePart) BuildMessages(body string) error {
 		return errors.Wrapf(err, "Error adding headers to message part")
 	}
 
-	//log.Printf("BuildMessages: adding headers %v\n", messagePart.Message.Header)
-
 	/*
 	 * If this is not a multipart message, bail early. We've got
 	 * what we need.
@@ -92,17 +90,16 @@ func (messagePart *SMTPMessagePart) BuildMessages(body string) error {
 		return errors.Wrapf(err, "Error getting boundary for message part")
 	}
 
-	//log.Printf("BuildMessages: boundary is %s\n", boundary)
-
 	if err = messagePart.AddBody(body); err != nil {
 		return errors.Wrapf(err, "Error adding body to message part")
 	}
 
-	//log.Printf("BuildMessages: body is %s\n\n", body)
-
 	return messagePart.ParseMessages(body, boundary)
 }
 
+/*
+GetBody retrieves the body portion of the message
+*/
 func (messagePart *SMTPMessagePart) GetBody() string {
 	var err error
 	var bytes []byte
@@ -115,6 +112,9 @@ func (messagePart *SMTPMessagePart) GetBody() string {
 	return string(bytes)
 }
 
+/*
+GetFilenameFromContentDisposition returns a filename from a Content-Disposition header
+*/
 func (messagePart *SMTPMessagePart) GetFilenameFromContentDisposition() string {
 	contentDisposition := messagePart.GetContentDisposition()
 	contentDispositionSplit := strings.Split(contentDisposition, ";")
@@ -130,14 +130,23 @@ func (messagePart *SMTPMessagePart) GetFilenameFromContentDisposition() string {
 	return fileName
 }
 
+/*
+GetHeader returns the value of a specified header key
+*/
 func (messagePart *SMTPMessagePart) GetHeader(key string) string {
 	return messagePart.Message.Header.Get(key)
 }
 
+/*
+GetMessageParts returns any additional sub-messages related to this message
+*/
 func (messagePart *SMTPMessagePart) GetMessageParts() []ISMTPMessagePart {
 	return messagePart.MessageParts
 }
 
+/*
+ParseMessages parses messages in an SMTP body
+*/
 func (messagePart *SMTPMessagePart) ParseMessages(body string, boundary string) error {
 	var err error
 	var bodyPart []byte
@@ -179,16 +188,25 @@ func (messagePart *SMTPMessagePart) ParseMessages(body string, boundary string) 
 	}
 }
 
+/*
+ContentIsMultipart returns true if the Content-Type header contains "multipart"
+*/
 func (messagePart *SMTPMessagePart) ContentIsMultipart() (bool, error) {
 	mediaType, _, err := messagePart.parseContentType()
 	return strings.HasPrefix(mediaType, "multipart/"), err
 }
 
+/*
+GetBoundary returns the message boundary string
+*/
 func (messagePart *SMTPMessagePart) GetBoundary() (string, error) {
 	_, boundary, err := messagePart.parseContentType()
 	return boundary, err
 }
 
+/*
+GetBoundaryFromHeaderString returns the boundary marker defined in the header
+*/
 func (messagePart *SMTPMessagePart) GetBoundaryFromHeaderString(header string) (string, error) {
 	_, params, err := mime.ParseMediaType(header)
 	if err != nil {
@@ -198,10 +216,16 @@ func (messagePart *SMTPMessagePart) GetBoundaryFromHeaderString(header string) (
 	return params["boundary"], nil
 }
 
+/*
+GetContentDisposition returns the value of the Content-Disposition header
+*/
 func (messagePart *SMTPMessagePart) GetContentDisposition() string {
 	return messagePart.Message.Header.Get("Content-Disposition")
 }
 
+/*
+GetContentType returns the value from the Content-Type header
+*/
 func (messagePart *SMTPMessagePart) GetContentType() string {
 	return messagePart.Message.Header.Get("Content-Type")
 }

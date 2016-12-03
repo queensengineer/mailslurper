@@ -9,32 +9,34 @@ import (
 	"net"
 	"strings"
 	"time"
-
-	"github.com/mailslurper/libmailslurper/smtpconstants"
 )
 
-type SmtpReader struct {
+/*
+An SMTPReader is a simple object for reading commands and responses
+from a connected TCP client
+*/
+type SMTPReader struct {
 	Connection net.Conn
 }
 
 /*
-This function reads the raw data from the socket connection to our client. This will
+The Read function reads the raw data from the socket connection to our client. This will
 read on the socket until there is nothing left to read and an error is generated.
 This method blocks the socket for the number of milliseconds defined in CONN_TIMEOUT_MILLISECONDS.
 It then records what has been read in that time, then blocks again until there is nothing left on
 the socket to read. The final value is stored and returned as a string.
 */
-func (this *SmtpReader) Read() string {
+func (smtpReader *SMTPReader) Read() string {
 	var raw bytes.Buffer
 	var bytesRead int
 
 	bytesRead = 1
 
 	for bytesRead > 0 {
-		this.Connection.SetReadDeadline(time.Now().Add(time.Millisecond * CONN_TIMEOUT_MILLISECONDS))
+		smtpReader.Connection.SetReadDeadline(time.Now().Add(time.Millisecond * CONN_TIMEOUT_MILLISECONDS))
 
 		buffer := make([]byte, RECEIVE_BUFFER_LEN)
-		bytesRead, err := this.Connection.Read(buffer)
+		bytesRead, err := smtpReader.Connection.Read(buffer)
 
 		if err != nil {
 			break
@@ -49,25 +51,25 @@ func (this *SmtpReader) Read() string {
 }
 
 /*
-This is used by the SMTP DATA command. It will read data from the connection
+ReadDataBlock is used by the SMTP DATA command. It will read data from the connection
 until the terminator is sent.
 */
-func (this *SmtpReader) ReadDataBlock() string {
+func (smtpReader *SMTPReader) ReadDataBlock() string {
 	var dataBuffer bytes.Buffer
-	timeLimit := time.Now().Add(time.Second * smtpconstants.COMMAND_TIMEOUT_SECONDS)
+	timeLimit := time.Now().Add(time.Second * COMMAND_TIMEOUT_SECONDS)
 
 	for {
-		dataResponse := this.Read()
+		dataResponse := smtpReader.Read()
 
 		if len(dataResponse) > 0 {
-			timeLimit = time.Now().Add(time.Second * smtpconstants.COMMAND_TIMEOUT_SECONDS)
+			timeLimit = time.Now().Add(time.Second * COMMAND_TIMEOUT_SECONDS)
 		}
 
 		if time.Now().After(timeLimit) {
 			break
 		}
 
-		terminatorPos := strings.Index(dataResponse, smtpconstants.SMTP_DATA_TERMINATOR)
+		terminatorPos := strings.Index(dataResponse, SMTP_DATA_TERMINATOR)
 		if terminatorPos <= -1 {
 			dataBuffer.WriteString(dataResponse)
 		} else {
