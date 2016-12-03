@@ -46,7 +46,7 @@ func CloseSMTPServerListener(handle net.Listener) error {
 }
 
 /*
-This function starts the process of handling SMTP client connections.
+Dispatch starts the process of handling SMTP client connections.
 The first order of business is to setup a channel for writing
 parsed mails, in the form of MailItemStruct variables, to our
 database. A goroutine is setup to listen on that
