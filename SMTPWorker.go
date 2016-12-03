@@ -205,13 +205,6 @@ func (smtpWorker *SmtpWorker) Process_DATA(streamInput string) (MailHeader, Mail
 		log.Printf("libmailslurper: ERROR parsing message contents: %s", err.Error())
 	}
 
-	/*
-		t, _ := json.MarshalIndent(smtpWorker.Mail.Message, "", "  ")
-		log.Printf("libmailslurper: INFO - Message Parts: %s", string(t))
-
-		log.Printf("Message: %s", smtpWorker.Mail.Message.MessageParts[0].GetMessageParts()[1].GetBody())
-	*/
-
 	if len(smtpWorker.Mail.Message.MessageParts) > 0 {
 		smtpWorker.recordMessagePart(smtpWorker.Mail.Message.MessageParts[0])
 	} else {
