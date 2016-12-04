@@ -3,13 +3,13 @@ package mailslurper
 import (
 	"io"
 	"io/ioutil"
-	"log"
 	"mime"
 	"mime/multipart"
 	"net/mail"
 	"net/textproto"
 	"strings"
 
+	"github.com/adampresley/webframework/logging2"
 	"github.com/pkg/errors"
 )
 
@@ -22,15 +22,19 @@ the recursive tree-like nature of the MIME protocol.
 type SMTPMessagePart struct {
 	Message      *mail.Message
 	MessageParts []ISMTPMessagePart
+
+	logger logging2.ILogger
 }
 
 /*
 NewSMTPMessagePart returns a new instance of this struct
 */
-func NewSMTPMessagePart() *SMTPMessagePart {
+func NewSMTPMessagePart(logger logging2.ILogger) *SMTPMessagePart {
 	return &SMTPMessagePart{
 		Message:      &mail.Message{},
 		MessageParts: make([]ISMTPMessagePart, 0),
+
+		logger: logger,
 	}
 }
 
@@ -105,7 +109,7 @@ func (messagePart *SMTPMessagePart) GetBody() string {
 	var bytes []byte
 
 	if bytes, err = ioutil.ReadAll(messagePart.Message.Body); err != nil {
-		log.Printf("libmailslurper: ERROR - Error reading message body: %s", err.Error())
+		messagePart.logger.Errorf("Problem reading message body: %s", err.Error())
 		return ""
 	}
 
@@ -159,7 +163,7 @@ func (messagePart *SMTPMessagePart) ParseMessages(body string, boundary string) 
 
 		switch err {
 		case io.EOF:
-			log.Printf("BuildMessages: reach EOF for part\n%v\n", part)
+			messagePart.logger.Debugf("Reached EOF for part")
 			return nil
 
 		case nil:
@@ -167,15 +171,15 @@ func (messagePart *SMTPMessagePart) ParseMessages(body string, boundary string) 
 				return errors.Wrapf(err, "Error reading body for content type '%s'", messagePart.Message.Header.Get("Content-Type"))
 			}
 
-			log.Printf("BuildMessages: building new message part:\n%s\n\n", string(bodyPart))
+			messagePart.logger.Debugf("Building new message part: %s", string(bodyPart))
 			if boundary, err = messagePart.GetBoundaryFromHeaderString(part.Header.Get("Content-Type")); err != nil {
 				return errors.Wrapf(err, "Error getting boundary marker")
 			}
 
-			log.Printf("New boundary: %s\n", boundary)
+			messagePart.logger.Debugf("New boundary for part: %s", boundary)
 			innerBody := string(bodyPart)
 
-			newMessage := NewSMTPMessagePart()
+			newMessage := NewSMTPMessagePart(messagePart.logger)
 			newMessage.Message.Header = messagePart.convertPartHeadersToMap(part.Header)
 			newMessage.Message.Body = strings.NewReader(innerBody)
 

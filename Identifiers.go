@@ -9,7 +9,7 @@ import (
 )
 
 /*
-Generate a UUID ID for database records.
+GenerateID creates a UUID ID for database records.
 */
 func GenerateID() (string, error) {
 	id, err := uuid.NewV4()

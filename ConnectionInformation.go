@@ -1,4 +1,10 @@
+// Copyright 2013-2016 Adam Presley. All rights reserved
+// Use of this source code is governed by the MIT license
+// that can be found in the LICENSE file.
+
 package mailslurper
+
+import "fmt"
 
 /*
 ConnectionInformation contains data necessary to establish a connection
@@ -39,4 +45,12 @@ SetDatabaseFile sets the name of a file-base database. This is used for SQLite
 */
 func (information *ConnectionInformation) SetDatabaseFile(filename string) {
 	information.Filename = filename
+}
+
+func (information *ConnectionInformation) String() string {
+	if information.Filename != "" {
+		return information.Filename
+	}
+
+	return fmt.Sprintf("%s:%s@%s:%d/%s", information.UserName, information.Password, information.Address, information.Port, information.Database)
 }

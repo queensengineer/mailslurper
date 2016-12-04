@@ -3,9 +3,9 @@ package mailslurper
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 
+	"github.com/adampresley/webframework/logging2"
 	"github.com/adampresley/webframework/sanitizer"
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -16,16 +16,18 @@ MySQLStorage implements the IStorage interface
 type MySQLStorage struct {
 	connectionInformation *ConnectionInformation
 	db                    *sql.DB
+	logger                logging2.ILogger
 	xssService            sanitizer.IXSSServiceProvider
 }
 
 /*
 MySQLStorage creates a new storage object that interfaces to MySQL
 */
-func NewMySQLStorage(connectionInformation *ConnectionInformation) *MySQLStorage {
+func NewMySQLStorage(connectionInformation *ConnectionInformation, logger logging2.ILogger) *MySQLStorage {
 	return &MySQLStorage{
 		connectionInformation: connectionInformation,
 		xssService:            sanitizer.NewXSSService(),
+		logger:                logger,
 	}
 }
 
@@ -56,6 +58,9 @@ func (storage *MySQLStorage) Disconnect() {
 	storage.db.Close()
 }
 
+/*
+Create does nothing for MySQL
+*/
 func (storage *MySQLStorage) Create() error {
 	return nil
 }
@@ -158,8 +163,8 @@ func (storage *MySQLStorage) GetMailByID(mailItemID string) (MailItem, error) {
 
 		if attachmentID.Valid {
 			newAttachment := &Attachment{
-				Id:     attachmentID.String,
-				MailId: mailItemID,
+				ID:     attachmentID.String,
+				MailID: mailItemID,
 				Headers: &AttachmentHeader{
 					FileName:    storage.xssService.SanitizeString(fileName.String),
 					ContentType: attachmentContentType.String,
@@ -280,8 +285,8 @@ func (storage *MySQLStorage) GetMailCollection(offset, length int, mailSearch *M
 
 		if attachmentID.Valid {
 			newAttachment := &Attachment{
-				Id:     attachmentID.String,
-				MailId: mailItemID,
+				ID:     attachmentID.String,
+				MailID: mailItemID,
 				Headers: &AttachmentHeader{
 					FileName:    storage.xssService.SanitizeString(fileName.String),
 					ContentType: attachmentContentType.String,
@@ -384,7 +389,7 @@ func (storage *MySQLStorage) StoreMail(mailItem *MailItem) (string, error) {
 	}
 
 	transaction.Commit()
-	log.Printf("New mail item written to database.\n\n")
+	storage.logger.Infof("New mail item written to database.")
 
 	return mailItem.ID, nil
 }

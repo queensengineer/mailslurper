@@ -102,7 +102,7 @@ func getMail(writer http.ResponseWriter, request *http.Request) {
 	 * Validate incoming arguments
 	 */
 	if mailID, ok = pathParts["id"]; !ok {
-		logger.Error("Invalid mail ID passed to GetMail")
+		logger.Errorf("Invalid mail ID passed to GetMail")
 		httpService.WriteText(writer, "A valid mail ID is required", 400)
 		return
 	}
@@ -146,7 +146,7 @@ func getMailCollection(writer http.ResponseWriter, request *http.Request) {
 		pageNumber = 1
 	} else {
 		if pageNumber, err = strconv.Atoi(pageNumberString); err != nil {
-			logger.Error("Invalid page number passed to GetMailCollection")
+			logger.Errorf("Invalid page number passed to GetMailCollection")
 			httpService.WriteText(writer, "A valid page number is required", 400)
 			return
 		}
@@ -251,7 +251,7 @@ func getMailMessage(writer http.ResponseWriter, request *http.Request) {
 	 * Validate incoming arguments
 	 */
 	if mailID, ok = pathParts["mailID"]; !ok {
-		logger.Error("Invalid mail ID passed to GetMailMessage")
+		logger.Errorf("Invalid mail ID passed to GetMailMessage")
 		httpService.WriteText(writer, "A valid mail ID is required", 400)
 		return
 	}
@@ -298,13 +298,13 @@ func downloadAttachment(writer http.ResponseWriter, request *http.Request) {
 	 * Validate incoming arguments
 	 */
 	if mailID, ok = pathParts["mailID"]; !ok {
-		logger.Error("No valid mail ID passed to DownloadAttachment")
+		logger.Errorf("No valid mail ID passed to DownloadAttachment")
 		httpService.WriteText(writer, "A valid mail ID is required", 400)
 		return
 	}
 
 	if attachmentID, ok = pathParts["attachmentID"]; !ok {
-		logger.Error("No valid attachment ID passed to DownloadAttachment")
+		logger.Errorf("No valid attachment ID passed to DownloadAttachment")
 		httpService.WriteText(writer, "A valid attachment ID is required", 400)
 		return
 	}

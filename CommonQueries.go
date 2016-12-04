@@ -1,3 +1,7 @@
+// Copyright 2013-2016 Adam Presley. All rights reserved
+// Use of this source code is governed by the MIT license
+// that can be found in the LICENSE file.
+
 package mailslurper
 
 import (
@@ -208,7 +212,7 @@ func storeAttachments(mailItemID string, transaction *sql.Tx, attachments []*Att
 		}
 
 		statement.Close()
-		currentAttachment.Id = attachmentID
+		currentAttachment.ID = attachmentID
 	}
 
 	return nil

@@ -3,10 +3,10 @@ package mailslurper
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
+	"github.com/adampresley/webframework/logging2"
 	"github.com/adampresley/webframework/sanitizer"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -17,16 +17,18 @@ SQLiteStorage implements the IStorage interface
 type SQLiteStorage struct {
 	connectionInformation *ConnectionInformation
 	db                    *sql.DB
+	logger                logging2.ILogger
 	xssService            sanitizer.IXSSServiceProvider
 }
 
 /*
 NewSQLiteStorage creates a new storage object that interfaces to SQLite
 */
-func NewSQLiteStorage(connectionInformation *ConnectionInformation) *SQLiteStorage {
+func NewSQLiteStorage(connectionInformation *ConnectionInformation, logger logging2.ILogger) *SQLiteStorage {
 	return &SQLiteStorage{
 		connectionInformation: connectionInformation,
 		xssService:            sanitizer.NewXSSService(),
+		logger:                logger,
 	}
 }
 
@@ -47,7 +49,7 @@ func (storage *SQLiteStorage) Disconnect() {
 }
 
 func (storage *SQLiteStorage) Create() error {
-	log.Println("INFO - Creating tables...")
+	storage.logger.Infof("Creating database tables...")
 
 	var err error
 
@@ -87,7 +89,7 @@ func (storage *SQLiteStorage) Create() error {
 		return err
 	}
 
-	log.Println("INFO - Created tables successfully.")
+	storage.logger.Infof("Created tables successfully.")
 	return nil
 }
 
@@ -189,8 +191,8 @@ func (storage *SQLiteStorage) GetMailByID(mailItemID string) (MailItem, error) {
 
 		if attachmentID.Valid {
 			newAttachment := &Attachment{
-				Id:     attachmentID.String,
-				MailId: mailItemID,
+				ID:     attachmentID.String,
+				MailID: mailItemID,
 				Headers: &AttachmentHeader{
 					FileName:    storage.xssService.SanitizeString(fileName.String),
 					ContentType: attachmentContentType.String,
@@ -311,8 +313,8 @@ func (storage *SQLiteStorage) GetMailCollection(offset, length int, mailSearch *
 
 		if attachmentID.Valid {
 			newAttachment := &Attachment{
-				Id:     attachmentID.String,
-				MailId: mailItemID,
+				ID:     attachmentID.String,
+				MailID: mailItemID,
 				Headers: &AttachmentHeader{
 					FileName:    storage.xssService.SanitizeString(fileName.String),
 					ContentType: attachmentContentType.String,
@@ -415,7 +417,7 @@ func (storage *SQLiteStorage) StoreMail(mailItem *MailItem) (string, error) {
 	}
 
 	transaction.Commit()
-	log.Printf("New mail item written to database.\n\n")
+	storage.logger.Infof("New mail item written to database.")
 
 	return mailItem.ID, nil
 }

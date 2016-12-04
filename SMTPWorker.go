@@ -7,12 +7,12 @@ package mailslurper
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/mail"
 	"strings"
 	"time"
 
+	"github.com/adampresley/webframework/logging2"
 	"github.com/adampresley/webframework/sanitizer"
 )
 
@@ -31,7 +31,8 @@ type SMTPWorker struct {
 	Writer                 SMTPWriter
 	XSSService             sanitizer.IXSSServiceProvider
 
-	pool ServerPool
+	pool   ServerPool
+	logger logging2.ILogger
 }
 
 /*
@@ -53,20 +54,20 @@ func (smtpWorker *SMTPWorker) ExecuteCommand(command SMTPCommand, streamInput st
 
 	case MAIL:
 		if err = smtpWorker.Process_MAIL(streamInput); err != nil {
-			log.Printf("libmailslurper: ERROR - Problem processing MAIL FROM: %s\n", err.Error())
+			smtpWorker.logger.Errorf("Problem processing MAIL FROM: %s", err.Error())
 		} else {
-			log.Printf("libmailslurper: INFO - Mail from %s\n", smtpWorker.Mail.FromAddress)
+			smtpWorker.logger.Infof("Mail from %s", smtpWorker.Mail.FromAddress)
 		}
 
 	case RCPT:
 		if err = smtpWorker.Process_RCPT(streamInput); err != nil {
-			log.Printf("libmailslurper: ERROR - Problem processing RCPT TO: %s\n", err.Error())
+			smtpWorker.logger.Errorf("Problem processing RCPT TO: %s", err.Error())
 		}
 
 	case DATA:
 		headers, body, err = smtpWorker.Process_DATA(streamInput)
 		if err != nil {
-			log.Println("libmailslurper: ERROR - Problem calling Process_DATA -", err)
+			smtpWorker.logger.Errorf("Problem calling Process_DATA: %s", err.Error())
 		} else {
 			if len(strings.TrimSpace(body.HTMLBody)) <= 0 {
 				smtpWorker.Mail.Body = smtpWorker.XSSService.SanitizeString(body.TextBody)
@@ -96,7 +97,7 @@ be written to the receiver channel.
 func (smtpWorker *SMTPWorker) InitializeMailItem() {
 	smtpWorker.Mail.ToAddresses = make([]string, 0)
 	smtpWorker.Mail.Attachments = make([]*Attachment, 0)
-	smtpWorker.Mail.Message = NewSMTPMessagePart()
+	smtpWorker.Mail.Message = NewSMTPMessagePart(smtpWorker.logger)
 
 	/*
 	 * IDs are generated ahead of time because
@@ -116,6 +117,7 @@ func NewSMTPWorker(
 	pool ServerPool,
 	emailValidationService EmailValidationProvider,
 	xssService sanitizer.IXSSServiceProvider,
+	logger logging2.ILogger,
 ) *SMTPWorker {
 	return &SMTPWorker{
 		EmailValidationService: emailValidationService,
@@ -123,12 +125,13 @@ func NewSMTPWorker(
 		State:                  SMTP_WORKER_IDLE,
 		XSSService:             xssService,
 
-		pool: pool,
+		pool:   pool,
+		logger: logger,
 	}
 }
 
 /*
-ParseMailHeader, given an entire mail transmission this method parses a set of mail headers.
+ParseMailHeader is given an entire mail transmission this method parses a set of mail headers.
 It will split lines up and figures out what header data goes into what
 structure key. Most headers follow this format:
 
@@ -176,7 +179,7 @@ func (smtpWorker *SMTPWorker) ParseMailHeader(contents string) error {
 			contentTypeSplit := strings.Split(contentType, ";")
 
 			smtpWorker.Mail.ContentType = strings.TrimSpace(contentTypeSplit[0])
-			log.Println("libmailslurper: INFO - Mail Content-Type: ", smtpWorker.Mail.ContentType)
+			smtpWorker.logger.Debugf("Mail Content-Type: %s", smtpWorker.Mail.ContentType)
 
 			/*
 			 * Check to see if we have a boundary marker
@@ -188,17 +191,17 @@ func (smtpWorker *SMTPWorker) ParseMailHeader(contents string) error {
 					boundarySplit := strings.Split(contentTypeRightSide, "=")
 					smtpWorker.Mail.Boundary = strings.Replace(strings.Join(boundarySplit[1:], "="), "\"", "", -1)
 
-					log.Println("libmailslurper: INFO - Mail Boundary: ", smtpWorker.Mail.Boundary)
+					smtpWorker.logger.Debugf("Mail Boundary: %s", smtpWorker.Mail.Boundary)
 				}
 			}
 
 		case "date":
-			smtpWorker.Mail.DateSent = ParseDateTime(strings.Join(splitItem[1:], ":"))
-			log.Println("libmailslurper: INFO - Mail Date: ", smtpWorker.Mail.DateSent)
+			smtpWorker.Mail.DateSent = ParseDateTime(strings.Join(splitItem[1:], ":"), smtpWorker.logger)
+			smtpWorker.logger.Debugf("Mail Date: %s", smtpWorker.Mail.DateSent)
 
 		case "mime-version":
 			smtpWorker.Mail.MIMEVersion = strings.TrimSpace(strings.Join(splitItem[1:], ""))
-			log.Println("libmailslurper: INFO - Mail MIME-Version: ", smtpWorker.Mail.MIMEVersion)
+			smtpWorker.logger.Debugf("Mail MIME-Version: %s", smtpWorker.Mail.MIMEVersion)
 
 		case "subject":
 			smtpWorker.Mail.Subject = strings.TrimSpace(strings.Join(splitItem[1:], ""))
@@ -206,7 +209,7 @@ func (smtpWorker *SMTPWorker) ParseMailHeader(contents string) error {
 				smtpWorker.Mail.Subject = "(No Subject)"
 			}
 
-			log.Println("libmailslurper: INFO - Mail Subject: ", smtpWorker.Mail.Subject)
+			smtpWorker.logger.Debugf("Mail Subject: %s", smtpWorker.Mail.Subject)
 		}
 	}
 
@@ -255,8 +258,8 @@ This function will return the following items.
 func (smtpWorker *SMTPWorker) Process_DATA(streamInput string) (MailHeader, MailBody, error) {
 	var err error
 
-	header := MailHeader{}
-	body := MailBody{}
+	header := MailHeader{logger: smtpWorker.logger}
+	body := MailBody{logger: smtpWorker.logger}
 
 	commandCheck := strings.Index(strings.ToLower(streamInput), "data")
 	if commandCheck < 0 {
@@ -283,13 +286,13 @@ func (smtpWorker *SMTPWorker) Process_DATA(streamInput string) (MailHeader, Mail
 	*/
 
 	if err = smtpWorker.Mail.Message.BuildMessages(entireMailContents); err != nil {
-		log.Printf("libmailslurper: ERROR parsing message contents: %s", err.Error())
+		smtpWorker.logger.Errorf("Problem parsing message contents: %s", err.Error())
 	}
 
 	if len(smtpWorker.Mail.Message.MessageParts) > 0 {
 		smtpWorker.recordMessagePart(smtpWorker.Mail.Message.MessageParts[0])
 	} else {
-		log.Printf("libmailslurper: ERROR - MessageParts has no parts!")
+		smtpWorker.logger.Errorf("MessagePart has no parts!")
 	}
 
 	body.HTMLBody = smtpWorker.Mail.HTMLBody
@@ -342,7 +345,7 @@ func (smtpWorker *SMTPWorker) addAttachment(messagePart ISMTPMessagePart) error 
 		FileName:                messagePart.GetFilenameFromContentDisposition(),
 	}
 
-	log.Printf("libmailslurper: INFO - Attachment: %v", headers)
+	smtpWorker.logger.Debugf("Adding attachment: %v", headers)
 
 	attachment := NewAttachment(headers, messagePart.GetBody())
 
@@ -500,25 +503,25 @@ func (smtpWorker *SMTPWorker) Work() {
 			command, err = GetCommandFromString(streamInput)
 
 			if err != nil {
-				log.Println("libmailslurper: ERROR finding command from input", streamInput, "-", err)
+				smtpWorker.logger.Errorf("Problem finding command from input %s: %s", streamInput, err.Error())
 				smtpWorker.State = SMTP_WORKER_ERROR
 				continue
 			}
 
 			if command == QUIT {
 				smtpWorker.State = SMTP_WORKER_DONE
-				log.Println("libmailslurper: INFO - Closing connection")
+				smtpWorker.logger.Infof("Closing connection")
 			} else {
 				err = smtpWorker.ExecuteCommand(command, streamInput)
 				if err != nil {
 					smtpWorker.State = SMTP_WORKER_ERROR
-					log.Println("libmailslurper: ERROR - Error executing command", command.String())
+					smtpWorker.logger.Errorf("Problem executing command %s", command.String())
 					continue
 				}
 			}
 
 			if smtpWorker.TimeoutHasExpired(startTime) {
-				log.Println("libmailslurper: INFO - Connection timeout. Terminating client connection")
+				smtpWorker.logger.Infof("Connection timeout. Terminating client connection")
 				smtpWorker.State = SMTP_WORKER_ERROR
 				continue
 			}

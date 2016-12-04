@@ -6,10 +6,15 @@ package mailslurper
 
 import (
 	"fmt"
-	"log"
 	"strings"
+
+	"github.com/adampresley/webframework/logging2"
 )
 
+/*
+A MailHeader contains all the metadata information for a given mail item,
+such as the subject, date, etc...
+*/
 type MailHeader struct {
 	ContentType string
 	Boundary    string
@@ -17,9 +22,14 @@ type MailHeader struct {
 	Subject     string
 	Date        string
 	XMailer     string
+
+	logger logging2.ILogger
 }
 
-func NewMailHeader(contentType, boundary, mimeVersion, subject, date, xMailer string) *MailHeader {
+/*
+NewMailHeader creates a new MailHeader object
+*/
+func NewMailHeader(contentType, boundary, mimeVersion, subject, date, xMailer string, logger logging2.ILogger) *MailHeader {
 	return &MailHeader{
 		ContentType: contentType,
 		Boundary:    boundary,
@@ -27,11 +37,13 @@ func NewMailHeader(contentType, boundary, mimeVersion, subject, date, xMailer st
 		Subject:     subject,
 		Date:        date,
 		XMailer:     xMailer,
+
+		logger: logger,
 	}
 }
 
 /*
-ParseMailHeader, given an entire mail transmission this method parses a set of mail headers.
+Parse, given an entire mail transmission this method parses a set of mail headers.
 It will split lines up and figures out what header data goes into what
 structure key. Most headers follow this format:
 
@@ -43,11 +55,11 @@ Then it can look like this:
 
 Content-Type: multipart/mixed; boundary="==abcsdfdfd=="\r\n
 */
-func (this *MailHeader) Parse(contents string) error {
+func (mailHeader *MailHeader) Parse(contents string) error {
 	var key string
 
-	this.XMailer = "MailSlurper!"
-	this.Boundary = ""
+	mailHeader.XMailer = "MailSlurper!"
+	mailHeader.Boundary = ""
 
 	/*
 	 * Split the DATA content by CRLF CRLF. The first item will be the data
@@ -78,8 +90,8 @@ func (this *MailHeader) Parse(contents string) error {
 			contentType := strings.Join(splitItem[1:], "")
 			contentTypeSplit := strings.Split(contentType, ";")
 
-			this.ContentType = strings.TrimSpace(contentTypeSplit[0])
-			log.Println("libmailslurper: INFO - Mail Content-Type: ", this.ContentType)
+			mailHeader.ContentType = strings.TrimSpace(contentTypeSplit[0])
+			mailHeader.logger.Debugf("Mail Content-Type: %s", mailHeader.ContentType)
 
 			/*
 			 * Check to see if we have a boundary marker
@@ -89,27 +101,26 @@ func (this *MailHeader) Parse(contents string) error {
 
 				if strings.Contains(strings.ToLower(contentTypeRightSide), "boundary") {
 					boundarySplit := strings.Split(contentTypeRightSide, "=")
-					this.Boundary = strings.Replace(strings.Join(boundarySplit[1:], "="), "\"", "", -1)
-
-					log.Println("libmailslurper: INFO - Mail Boundary: ", this.Boundary)
+					mailHeader.Boundary = strings.Replace(strings.Join(boundarySplit[1:], "="), "\"", "", -1)
+					mailHeader.logger.Debugf("Mail Boundary: %s", mailHeader.Boundary)
 				}
 			}
 
 		case "date":
-			this.Date = ParseDateTime(strings.Join(splitItem[1:], ":"))
-			log.Println("libmailslurper: INFO - Mail Date: ", this.Date)
+			mailHeader.Date = ParseDateTime(strings.Join(splitItem[1:], ":"), mailHeader.logger)
+			mailHeader.logger.Debugf("Mail Date: %s", mailHeader.Date)
 
 		case "mime-version":
-			this.MIMEVersion = strings.TrimSpace(strings.Join(splitItem[1:], ""))
-			log.Println("libmailslurper: INFO - Mail MIME-Version: ", this.MIMEVersion)
+			mailHeader.MIMEVersion = strings.TrimSpace(strings.Join(splitItem[1:], ""))
+			mailHeader.logger.Debugf("Mail MIME-Version: %s", mailHeader.MIMEVersion)
 
 		case "subject":
-			this.Subject = strings.TrimSpace(strings.Join(splitItem[1:], ""))
-			if this.Subject == "" {
-				this.Subject = "(No Subject)"
+			mailHeader.Subject = strings.TrimSpace(strings.Join(splitItem[1:], ""))
+			if mailHeader.Subject == "" {
+				mailHeader.Subject = "(No Subject)"
 			}
 
-			log.Println("libmailslurper: INFO - Mail Subject: ", this.Subject)
+			mailHeader.logger.Debugf("Mail Subject: %s", mailHeader.Subject)
 		}
 	}
 

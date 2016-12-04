@@ -9,6 +9,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/adampresley/webframework/logging2"
 )
 
 /*
@@ -17,6 +19,8 @@ from a connected TCP client
 */
 type SMTPReader struct {
 	Connection net.Conn
+
+	logger logging2.ILogger
 }
 
 /*

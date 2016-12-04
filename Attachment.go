@@ -10,13 +10,20 @@ import (
 	"strings"
 )
 
+/*
+An Attachment is any content embedded in the mail data that is not
+considered the body
+*/
 type Attachment struct {
-	Id       string            `json:"id"`
-	MailId   string            `json:"mailId"`
+	ID       string            `json:"id"`
+	MailID   string            `json:"mailId"`
 	Headers  *AttachmentHeader `json:"headers"`
 	Contents string            `json:"contents"`
 }
 
+/*
+NewAttachment creates a new Attachment object
+*/
 func NewAttachment(headers *AttachmentHeader, contents string) *Attachment {
 	return &Attachment{
 		Headers:  headers,

@@ -10,6 +10,6 @@ of mail items.
 */
 type MailCollectionResponse struct {
 	MailItems    []MailItem `json:"mailItems"`
-	TotalPages   int                 `json:"totalPages"`
-	TotalRecords int                 `json:"totalRecords"`
+	TotalPages   int        `json:"totalPages"`
+	TotalRecords int        `json:"totalRecords"`
 }

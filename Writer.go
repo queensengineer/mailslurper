@@ -5,9 +5,10 @@
 package mailslurper
 
 import (
-	"log"
 	"net"
 	"time"
+
+	"github.com/adampresley/webframework/logging2"
 )
 
 /*
@@ -16,6 +17,8 @@ to a client connected on a TCP socket
 */
 type SMTPWriter struct {
 	Connection net.Conn
+
+	logger logging2.ILogger
 }
 
 /*
@@ -37,7 +40,7 @@ func (smtpWriter *SMTPWriter) SayHello() error {
 		return err
 	}
 
-	log.Println("libmailslurper: INFO - Reading data from client connection...")
+	smtpWriter.logger.Infof("Reading data from client connection...")
 	return nil
 }
 
@@ -56,7 +59,7 @@ func (smtpWriter *SMTPWriter) SendResponse(response string) error {
 	var err error
 
 	if err = smtpWriter.Connection.SetWriteDeadline(time.Now().Add(time.Second * 2)); err != nil {
-		log.Printf("Error setting write deadline: %s", err.Error())
+		smtpWriter.logger.Errorf("Problem setting write deadline: %s", err.Error())
 	}
 
 	_, err = smtpWriter.Connection.Write([]byte(string(response + SMTP_CRLF)))

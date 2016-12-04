@@ -4,27 +4,27 @@
 
 package mailslurper
 
-import "log"
+import "github.com/adampresley/webframework/logging2"
 
 /*
 ConnectToStorage establishes a connection to the configured database engine and returns
 an object.
 */
-func ConnectToStorage(storageType StorageType, connectionInfo *ConnectionInformation) (IStorage, error) {
+func ConnectToStorage(storageType StorageType, connectionInfo *ConnectionInformation, logger logging2.ILogger) (IStorage, error) {
 	var err error
 	var storageHandle IStorage
 
-	log.Println("libmailslurper: INFO - Connecting to database")
+	logger.Infof("Connecting to database")
 
 	switch storageType {
 	case STORAGE_SQLITE:
-		storageHandle = NewSQLiteStorage(connectionInfo)
+		storageHandle = NewSQLiteStorage(connectionInfo, logger)
 
 	case STORAGE_MSSQL:
-		storageHandle = NewMSSQLStorage(connectionInfo)
+		storageHandle = NewMSSQLStorage(connectionInfo, logger)
 
 	case STORAGE_MYSQL:
-		storageHandle = NewMySQLStorage(connectionInfo)
+		storageHandle = NewMySQLStorage(connectionInfo, logger)
 	}
 
 	if err = storageHandle.Connect(); err != nil {

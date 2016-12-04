@@ -1,4 +1,4 @@
-// Copyright 2013-2014 Adam Presley. All rights reserved
+// Copyright 2013-2016 Adam Presley. All rights reserved
 // Use of this source code is governed by the MIT license
 // that can be found in the LICENSE file.
 
@@ -6,15 +6,16 @@ package mailslurper
 
 import (
 	"crypto/tls"
-	"log"
 	"net"
+
+	"github.com/adampresley/webframework/logging2"
 )
 
 /*
 SetupSMTPServerListener establishes a listening connection to a socket on an address. This will
 return a net.Listener handle.
 */
-func SetupSMTPServerListener(config *Configuration) (net.Listener, error) {
+func SetupSMTPServerListener(config *Configuration, logger logging2.ILogger) (net.Listener, error) {
 	var tcpAddress *net.TCPAddr
 	var certificate tls.Certificate
 	var err error
@@ -26,7 +27,7 @@ func SetupSMTPServerListener(config *Configuration) (net.Listener, error) {
 
 		tlsConfig := &tls.Config{Certificates: []tls.Certificate{certificate}}
 
-		log.Println("libmailslurper: INFO - SMTP listener running on SSL - ", config.GetFullSMTPBindingAddress())
+		logger.Infof("SMTP listener running on SSL - %s", config.GetFullSMTPBindingAddress())
 		return tls.Listen("tcp", config.GetFullSMTPBindingAddress(), tlsConfig)
 	}
 
@@ -34,7 +35,7 @@ func SetupSMTPServerListener(config *Configuration) (net.Listener, error) {
 		return &net.TCPListener{}, err
 	}
 
-	log.Println("libmailslurper: INFO - SMTP listener running on", config.GetFullSMTPBindingAddress())
+	logger.Infof("SMTP listener running on %s", config.GetFullSMTPBindingAddress())
 	return net.ListenTCP("tcp", tcpAddress)
 }
 
@@ -58,7 +59,7 @@ and parser and the parser process is started. If the parsing is successful
 the MailItemStruct is added to a channel. An receivers passed in will be
 listening on that channel and may do with the mail item as they wish.
 */
-func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemReceiver) {
+func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemReceiver, logger logging2.ILogger) {
 	/*
 	 * Setup our receivers. These guys are basically subscribers to
 	 * the MailItem channel.
@@ -67,13 +68,12 @@ func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemR
 	var worker *SMTPWorker
 
 	go func() {
-		log.Println("libmailslurper: INFO -", len(receivers), "receiver(s) listening")
+		logger.Infof("%d receiver(s) listening", len(receivers))
 
 		for {
 			select {
 			case item := <-mailItemChannel:
 				for _, r := range receivers {
-					log.Printf("libmailslurper: INFO - Item received: %v", item)
 					go r.Receive(&item)
 				}
 			}
@@ -86,13 +86,13 @@ func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemR
 	for {
 		connection, err := handle.Accept()
 		if err != nil {
-			log.Panicf("libmailslurper: ERROR - Error while accepting SMTP requests: %s", err)
+			logger.Errorf("Problem accepting SMTP requests - %s", err.Error())
+			panic(err)
 		}
 
 		if worker, err = serverPool.NextWorker(connection, mailItemChannel); err != nil {
 			connection.Close()
-
-			log.Printf("libmailslurper: ERROR - %s", err.Error())
+			logger.Errorf(err.Error())
 			continue
 		}
 

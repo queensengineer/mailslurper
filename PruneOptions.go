@@ -4,6 +4,10 @@
 
 package mailslurper
 
+/*
+PruneOptions is the master list of options given to a user
+when pruning mail from the database
+*/
 var PruneOptions = []PruneOption{
 	{PruneCode("60plus"), "Older than 60 days"},
 	{PruneCode("30plus"), "Older than 30 days"},

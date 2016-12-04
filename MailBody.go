@@ -6,21 +6,32 @@ package mailslurper
 
 import (
 	"fmt"
-	"log"
 	"strings"
+
+	"github.com/adampresley/webframework/logging2"
 )
 
+/*
+A MailBody is the body portion of a mail
+*/
 type MailBody struct {
 	TextBody    string
 	HTMLBody    string
 	Attachments []*Attachment
+
+	logger logging2.ILogger
 }
 
-func NewMailBody(textBody, htmlBody string, attachments []*Attachment) *MailBody {
+/*
+NewMailBody creates a new MailBody object
+*/
+func NewMailBody(textBody, htmlBody string, attachments []*Attachment, logger logging2.ILogger) *MailBody {
 	return &MailBody{
 		TextBody:    textBody,
 		HTMLBody:    htmlBody,
 		Attachments: attachments,
+
+		logger: logger,
 	}
 }
 
@@ -31,8 +42,8 @@ a text message. A more complex example would be a multipart message
 with mixed text and HTML. It will also parse any attachments and
 retrieve their contents into an attachments array.
 */
-func (this *MailBody) Parse(contents string, boundary string) error {
-	log.Println("Full body == ", contents)
+func (mailBody *MailBody) Parse(contents string, boundary string) error {
+	mailBody.logger.Debugf("Full body of message == %s", contents)
 
 	/*
 	 * Split the DATA content by CRLF CRLF. The first item will be the data
@@ -44,14 +55,14 @@ func (this *MailBody) Parse(contents string, boundary string) error {
 	}
 
 	contents = strings.Join(headerBodySplit[1:], "\r\n\r\n")
-	this.Attachments = make([]*Attachment, 0)
+	mailBody.Attachments = make([]*Attachment, 0)
 
 	/*
 	 * If there is no boundary then this is the simplest
 	 * plain text type of mail you can get.
 	 */
 	if len(boundary) <= 0 {
-		this.TextBody = contents
+		mailBody.TextBody = contents
 	} else {
 		bodyParts := strings.Split(strings.TrimSpace(contents), fmt.Sprintf("--%s", strings.TrimSpace(boundary)))
 		var index int
@@ -70,10 +81,10 @@ func (this *MailBody) Parse(contents string, boundary string) error {
 
 			switch {
 			case strings.Contains(header.ContentType, "text/plain"):
-				this.TextBody = header.Body
+				mailBody.TextBody = header.Body
 
 			case strings.Contains(header.ContentType, "text/html"):
-				this.HTMLBody = header.Body
+				mailBody.HTMLBody = header.Body
 
 			case strings.Contains(header.ContentDisposition, "attachment"):
 				newAttachment := &Attachment{
@@ -81,7 +92,7 @@ func (this *MailBody) Parse(contents string, boundary string) error {
 					Contents: header.Body,
 				}
 
-				this.Attachments = append(this.Attachments, newAttachment)
+				mailBody.Attachments = append(mailBody.Attachments, newAttachment)
 			}
 		}
 	}

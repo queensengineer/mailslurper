@@ -6,6 +6,9 @@ package mailslurper
 
 import "time"
 
+/*
+A PruneCode is a text code that represents a set of date ranges
+*/
 type PruneCode string
 
 /*

@@ -7,6 +7,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -17,7 +18,7 @@ import (
 
 	"github.com/adampresley/presleylife/www"
 	"github.com/adampresley/webframework/console"
-	"github.com/adampresley/webframework/logging"
+	"github.com/adampresley/webframework/logging2"
 	"github.com/alecthomas/template"
 	"github.com/mailslurper/mailslurper"
 	"github.com/skratchdot/open-golang/open"
@@ -35,13 +36,20 @@ const (
 
 var config *mailslurper.Configuration
 var database mailslurper.IStorage
-var logger *logging.Logger
+var logger logging2.ILogger
 var serviceTierConfig *mailslurper.ServiceTierConfiguration
+
+var logFormat = flag.String("logformat", "simple", "Format for logging. 'simple' or 'json'. Default is 'simple'")
+var logLevel = flag.String("loglevel", "info", "Level of logs to write. Valid values are 'debug', 'info', or 'error'. Default is 'info'")
 
 func main() {
 	var err error
+	flag.Parse()
 
-	logger = logging.NewLoggerWithMinimumLevel("MailSlurper", logging.StringToLogType("debug"))
+	//logger = logging2.NewJSONLogger("MailSlurper", logging2.StringToLogType("debug"))
+	logger = logging2.LogFactory(logging2.StringToLogFormat(*logFormat), "MailSlurper", logging2.StringToLogType(*logLevel))
+	logger.EnableColors()
+
 	logger.Infof("Starting MailSlurper Server v%s", SERVER_VERSION)
 
 	/*
@@ -56,7 +64,7 @@ func main() {
 	 * Load configuration
 	 */
 	if config, err = mailslurper.LoadConfigurationFromFile(CONFIGURATION_FILE_NAME); err != nil {
-		logger.Fatalf("There was an error reading the configuration file '%s': %s", CONFIGURATION_FILE_NAME, err.Error())
+		logger.Errorf("There was an error reading the configuration file '%s': %s", CONFIGURATION_FILE_NAME, err.Error())
 		os.Exit(-1)
 	}
 
@@ -65,8 +73,8 @@ func main() {
 	 */
 	storageType, databaseConnection := config.GetDatabaseConfiguration()
 
-	if database, err = mailslurper.ConnectToStorage(storageType, databaseConnection); err != nil {
-		logger.Fatalf("Error connecting to storage type '%d' with a connection string of %s: %s", int(storageType), databaseConnection, err.Error())
+	if database, err = mailslurper.ConnectToStorage(storageType, databaseConnection, logger); err != nil {
+		logger.Errorf("Error connecting to storage type '%d' with a connection string of %s: %s", int(storageType), databaseConnection.String(), err.Error())
 		os.Exit(-1)
 	}
 
@@ -75,12 +83,12 @@ func main() {
 	/*
 	 * Setup the server pool
 	 */
-	pool := mailslurper.NewServerPool(config.MaxWorkers)
+	pool := mailslurper.NewServerPool(logger, config.MaxWorkers)
 
 	/*
 	 * Setup the SMTP listener
 	 */
-	smtpServer, err := mailslurper.SetupSMTPServerListener(config)
+	smtpServer, err := mailslurper.SetupSMTPServerListener(config, logger)
 	if err != nil {
 		logger.Errorf("MailSlurper: ERROR - There was a problem starting the SMTP listener: %s", err.Error())
 		os.Exit(0)
@@ -92,13 +100,13 @@ func main() {
 	 * Setup receivers (subscribers) to handle new mail items.
 	 */
 	receivers := []mailslurper.IMailItemReceiver{
-		mailslurper.NewDatabaseReceiver(database),
+		mailslurper.NewDatabaseReceiver(database, logger),
 	}
 
 	/*
 	 * Start the SMTP dispatcher
 	 */
-	go mailslurper.Dispatch(pool, smtpServer, receivers)
+	go mailslurper.Dispatch(pool, smtpServer, receivers, logger)
 
 	/*
 	 * Setup and start the HTTP listener for the application site

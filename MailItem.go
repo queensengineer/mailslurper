@@ -4,6 +4,8 @@
 
 package mailslurper
 
+import "github.com/adampresley/webframework/logging2"
+
 /*
 MailItem is a struct describing a parsed mail item. This is
 populated after an incoming client connection has finished
@@ -28,7 +30,10 @@ type MailItem struct {
 	HTMLBody          string
 }
 
-func NewMailItem(id, dateSent, fromAddress string, toAddresses []string, subject, xMailer, body, contentType, boundary string, attachments []*Attachment) *MailItem {
+/*
+NewMailItem creates a new MailItem object
+*/
+func NewMailItem(id, dateSent, fromAddress string, toAddresses []string, subject, xMailer, body, contentType, boundary string, attachments []*Attachment, logger logging2.ILogger) *MailItem {
 	return &MailItem{
 		ID:          id,
 		DateSent:    dateSent,
@@ -41,6 +46,6 @@ func NewMailItem(id, dateSent, fromAddress string, toAddresses []string, subject
 		Boundary:    boundary,
 		Attachments: attachments,
 
-		Message: NewSMTPMessagePart(),
+		Message: NewSMTPMessagePart(logger),
 	}
 }

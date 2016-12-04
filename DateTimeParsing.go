@@ -5,9 +5,10 @@
 package mailslurper
 
 import (
-	"log"
 	"strings"
 	"time"
+
+	"github.com/adampresley/webframework/logging2"
 )
 
 var dateInputFormats = []string{
@@ -23,7 +24,7 @@ var dateInputFormats = []string{
 ParseDateTime takes a date/time string and attempts to parse it and return a newly formatted
 date/time that looks like YYYY-MM-DD HH:MM:SS
 */
-func ParseDateTime(dateString string) string {
+func ParseDateTime(dateString string, logger logging2.ILogger) string {
 	outputFormat := "2006-01-02 15:04:05"
 	var parsedTime time.Time
 	var err error
@@ -39,7 +40,7 @@ func ParseDateTime(dateString string) string {
 	}
 
 	if result == "" {
-		log.Printf("libmailslurper: ERROR - Parsing date %s", dateString)
+		logger.Errorf("Problem parsing date %s", dateString)
 		result = dateString
 	}
 

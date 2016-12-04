@@ -5,10 +5,15 @@
 package mailslurper
 
 import (
-	"log"
 	"strings"
+
+	"github.com/adampresley/webframework/logging2"
 )
 
+/*
+AttachmentHeader provides information that describes an attachment. It has information
+such as the type of content, file name, etc...
+*/
 type AttachmentHeader struct {
 	ContentType             string `json:"contentType"`
 	MIMEVersion             string `json:"mimeVersion"`
@@ -16,9 +21,14 @@ type AttachmentHeader struct {
 	ContentDisposition      string `json:"contentDisposition"`
 	FileName                string `json:"fileName"`
 	Body                    string `json:"body"`
+
+	logger logging2.ILogger
 }
 
-func NewAttachmentHeader(contentType, mimeVersion, contentTransferEncoding, contentDisposition, fileName, body string) *AttachmentHeader {
+/*
+NewAttachmentHeader creates a new AttachmentHeader object
+*/
+func NewAttachmentHeader(contentType, mimeVersion, contentTransferEncoding, contentDisposition, fileName, body string, logger logging2.ILogger) *AttachmentHeader {
 	return &AttachmentHeader{
 		ContentType:             contentType,
 		MIMEVersion:             mimeVersion,
@@ -26,31 +36,33 @@ func NewAttachmentHeader(contentType, mimeVersion, contentTransferEncoding, cont
 		ContentDisposition:      contentDisposition,
 		FileName:                fileName,
 		Body:                    body,
+
+		logger: logger,
 	}
 }
 
 /*
-Parses a set of attachment headers. Splits lines up and figures out what
+Parse processes a set of attachment headers. Splits lines up and figures out what
 header data goes into what structure key. Most headers follow this format:
 
 Header-Name: Some value here\r\n
 */
-func (this *AttachmentHeader) Parse(contents string) {
+func (attachmentHeader *AttachmentHeader) Parse(contents string) {
 	var key string
 
-	this.FileName = ""
-	this.ContentType = ""
-	this.ContentDisposition = ""
-	this.ContentTransferEncoding = ""
-	this.MIMEVersion = ""
-	this.Body = ""
+	attachmentHeader.FileName = ""
+	attachmentHeader.ContentType = ""
+	attachmentHeader.ContentDisposition = ""
+	attachmentHeader.ContentTransferEncoding = ""
+	attachmentHeader.MIMEVersion = ""
+	attachmentHeader.Body = ""
 
 	headerBodySplit := strings.Split(contents, "\r\n\r\n")
 
 	if len(headerBodySplit) < 2 {
-		log.Println("libmailslurper: WARNING - Attachment has no body content")
+		attachmentHeader.logger.Debugf("Attachment has no body content")
 	} else {
-		this.Body = strings.Join(headerBodySplit[1:], "\r\n\r\n")
+		attachmentHeader.Body = strings.Join(headerBodySplit[1:], "\r\n\r\n")
 	}
 
 	contents = headerBodySplit[0]
@@ -71,39 +83,39 @@ func (this *AttachmentHeader) Parse(contents string) {
 		switch strings.ToLower(key) {
 		case "content-disposition":
 			contentDisposition := strings.TrimSpace(strings.Join(splitItem[1:], ""))
-			log.Println("libmailslurper: INFO - Attachment Content-Disposition: ", contentDisposition)
+			attachmentHeader.logger.Debugf("Attachment Content-Disposition: %s", contentDisposition)
 
 			contentDispositionSplit := strings.Split(contentDisposition, ";")
 			contentDispositionRightSide := strings.TrimSpace(strings.Join(contentDispositionSplit[1:], ";"))
 
 			if len(contentDispositionSplit) < 2 || (len(contentDispositionSplit) > 1 && len(strings.TrimSpace(contentDispositionRightSide)) <= 0) {
-				this.ContentDisposition = contentDisposition
+				attachmentHeader.ContentDisposition = contentDisposition
 			} else {
-				this.ContentDisposition = strings.TrimSpace(contentDispositionSplit[0])
+				attachmentHeader.ContentDisposition = strings.TrimSpace(contentDispositionSplit[0])
 
 				/*
 				 * See if we have an attachment and filename
 				 */
-				if strings.Contains(strings.ToLower(this.ContentDisposition), "attachment") && len(strings.TrimSpace(contentDispositionRightSide)) > 0 {
+				if strings.Contains(strings.ToLower(attachmentHeader.ContentDisposition), "attachment") && len(strings.TrimSpace(contentDispositionRightSide)) > 0 {
 					filenameSplit := strings.Split(contentDispositionRightSide, "=")
-					this.FileName = strings.Replace(strings.Join(filenameSplit[1:], "="), "\"", "", -1)
+					attachmentHeader.FileName = strings.Replace(strings.Join(filenameSplit[1:], "="), "\"", "", -1)
 				}
 			}
 
 		case "content-transfer-encoding":
-			this.ContentTransferEncoding = strings.TrimSpace(strings.Join(splitItem[1:], ""))
-			log.Println("libmailslurper: INFO - Attachment Content-Transfer-Encoding: ", this.ContentTransferEncoding)
+			attachmentHeader.ContentTransferEncoding = strings.TrimSpace(strings.Join(splitItem[1:], ""))
+			attachmentHeader.logger.Debugf("Attachment Content-Transfer-Encoding: %s", attachmentHeader.ContentTransferEncoding)
 
 		case "content-type":
 			contentType := strings.TrimSpace(strings.Join(splitItem[1:], ""))
-			log.Println("libmailslurper: INFO - Attachment Content-Type: ", contentType)
+			attachmentHeader.logger.Debugf("Attachment Content-Type: %s", contentType)
 
 			contentTypeSplit := strings.Split(contentType, ";")
 
 			if len(contentTypeSplit) < 2 {
-				this.ContentType = contentType
+				attachmentHeader.ContentType = contentType
 			} else {
-				this.ContentType = strings.TrimSpace(contentTypeSplit[0])
+				attachmentHeader.ContentType = strings.TrimSpace(contentTypeSplit[0])
 				contentTypeRightSide := strings.TrimSpace(strings.Join(contentTypeSplit[1:], ";"))
 
 				/*
@@ -111,13 +123,13 @@ func (this *AttachmentHeader) Parse(contents string) {
 				 */
 				if strings.Contains(strings.ToLower(contentTypeRightSide), "name") || strings.Contains(strings.ToLower(contentTypeRightSide), "filename") {
 					filenameSplit := strings.Split(contentTypeRightSide, "=")
-					this.FileName = strings.Replace(strings.Join(filenameSplit[1:], "="), "\"", "", -1)
+					attachmentHeader.FileName = strings.Replace(strings.Join(filenameSplit[1:], "="), "\"", "", -1)
 				}
 			}
 
 		case "mime-version":
-			this.MIMEVersion = strings.TrimSpace(strings.Join(splitItem[1:], ""))
-			log.Println("libmailslurper: INFO - Attachment MIME-Version: ", this.MIMEVersion)
+			attachmentHeader.MIMEVersion = strings.TrimSpace(strings.Join(splitItem[1:], ""))
+			attachmentHeader.logger.Debugf("Attachment MIME-Version: %s", attachmentHeader.MIMEVersion)
 		}
 	}
 }
