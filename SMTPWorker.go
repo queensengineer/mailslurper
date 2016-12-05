@@ -6,7 +6,6 @@ package mailslurper
 
 import (
 	"bufio"
-	"fmt"
 	"net"
 	"net/mail"
 	"net/textproto"
@@ -114,92 +113,6 @@ func NewSMTPWorker(
 		pool:   pool,
 		logger: logger,
 	}
-}
-
-/*
-ParseMailHeader is given an entire mail transmission this method parses a set of mail headers.
-It will split lines up and figures out what header data goes into what
-structure key. Most headers follow this format:
-
-Header-Name: Some value here\r\n
-
-However some headers, such as Content-Type, may have additional information,
-especially when the content type is a multipart and there are attachments.
-Then it can look like this:
-
-Content-Type: multipart/mixed; boundary="==abcsdfdfd=="\r\n
-*/
-func (smtpWorker *SMTPWorker) ParseMailHeader(contents string) error {
-	var key string
-
-	smtpWorker.Mail.XMailer = "MailSlurper!"
-	smtpWorker.Mail.Boundary = ""
-
-	/*
-	 * Split the DATA content by CRLF CRLF. The first item will be the data
-	 * headers. Everything past that is body/message.
-	 */
-	headerBodySplit := strings.Split(contents, "\r\n\r\n")
-	if len(headerBodySplit) < 2 {
-		return fmt.Errorf("Expected DATA block to contain a header section and a body section")
-	}
-
-	contents = headerBodySplit[0]
-
-	/*
-	 * Unfold and split the header into lines. Loop over each line
-	 * and figure out what headers are present. Store them.
-	 * Sadly some headers require special processing.
-	 */
-	contents = UnfoldHeaders(contents)
-	splitHeader := strings.Split(contents, "\r\n")
-	numLines := len(splitHeader)
-
-	for index := 0; index < numLines; index++ {
-		splitItem := strings.Split(splitHeader[index], ":")
-		key = splitItem[0]
-
-		switch strings.ToLower(key) {
-		case "content-type":
-			contentType := strings.Join(splitItem[1:], "")
-			contentTypeSplit := strings.Split(contentType, ";")
-
-			smtpWorker.Mail.ContentType = strings.TrimSpace(contentTypeSplit[0])
-			smtpWorker.logger.Debugf("Mail Content-Type: %s", smtpWorker.Mail.ContentType)
-
-			/*
-			 * Check to see if we have a boundary marker
-			 */
-			if len(contentTypeSplit) > 1 {
-				contentTypeRightSide := strings.Join(contentTypeSplit[1:], ";")
-
-				if strings.Contains(strings.ToLower(contentTypeRightSide), "boundary") {
-					boundarySplit := strings.Split(contentTypeRightSide, "=")
-					smtpWorker.Mail.Boundary = strings.Replace(strings.Join(boundarySplit[1:], "="), "\"", "", -1)
-
-					smtpWorker.logger.Debugf("Mail Boundary: %s", smtpWorker.Mail.Boundary)
-				}
-			}
-
-		case "date":
-			smtpWorker.Mail.DateSent = ParseDateTime(strings.Join(splitItem[1:], ":"), smtpWorker.logger)
-			smtpWorker.logger.Debugf("Mail Date: %s", smtpWorker.Mail.DateSent)
-
-		case "mime-version":
-			smtpWorker.Mail.MIMEVersion = strings.TrimSpace(strings.Join(splitItem[1:], ""))
-			smtpWorker.logger.Debugf("Mail MIME-Version: %s", smtpWorker.Mail.MIMEVersion)
-
-		case "subject":
-			smtpWorker.Mail.Subject = strings.TrimSpace(strings.Join(splitItem[1:], ""))
-			if smtpWorker.Mail.Subject == "" {
-				smtpWorker.Mail.Subject = "(No Subject)"
-			}
-
-			smtpWorker.logger.Debugf("Mail Subject: %s", smtpWorker.Mail.Subject)
-		}
-	}
-
-	return nil
 }
 
 /*
@@ -350,21 +263,15 @@ func (smtpWorker *SMTPWorker) getBodyContent(contents string) (string, error) {
 func (smtpWorker *SMTPWorker) recordMessagePart(message ISMTPMessagePart) error {
 	if smtpWorker.isMIMEType(message, "text/plain") && smtpWorker.Mail.TextBody == "" && !smtpWorker.messagePartIsAttachment(message) {
 		smtpWorker.Mail.TextBody = message.GetBody()
-		smtpWorker.logger.Debugf("We have a text body: %s", smtpWorker.Mail.TextBody)
 	} else {
 		if smtpWorker.isMIMEType(message, "text/html") && smtpWorker.Mail.HTMLBody == "" && !smtpWorker.messagePartIsAttachment(message) {
 			smtpWorker.Mail.HTMLBody = message.GetBody()
-			smtpWorker.logger.Debugf("We have an HTML body: %s", smtpWorker.Mail.HTMLBody)
 		} else {
-			smtpWorker.logger.Debugf("We have a multipart with %d messages", len(message.GetMessageParts()))
-
 			if smtpWorker.isMIMEType(message, "multipart") {
-				for index, m := range message.GetMessageParts() {
-					smtpWorker.logger.Debugf("Message #%d", index)
+				for _, m := range message.GetMessageParts() {
 					smtpWorker.recordMessagePart(m)
 				}
 			} else {
-				smtpWorker.logger.Debugf("We have an attachment")
 				smtpWorker.addAttachment(message)
 			}
 		}
