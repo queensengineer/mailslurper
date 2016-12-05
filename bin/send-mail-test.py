@@ -26,6 +26,7 @@ toAddresses = (
     "recipient1@gmail.com",
     "recipient2@gmail.com",
     "test@altavista.com",
+    "data@test.com",
 )
 
 DATE_FORMAT_1 = "%a, %d %b %Y %H:%M:%S -0700 (UTC)"
@@ -127,26 +128,26 @@ try:
     # Send html with "data" in "to". This is to ensure parsing data blocks
     # do not fail.
     #
-   #  msg = makeHTMLMessage(
-   #      "Weird TO Address",
-   #      datetime.datetime.now(),
-   #      DATE_FORMAT_1,
-   #      "<p>This is an email sent to an address with 'data' in the TO field.</p>"
-   #  )
+    msg = makeHTMLMessage(
+        "Weird TO Address",
+        datetime.datetime.now(),
+        DATE_FORMAT_1,
+        "<p>This is an email sent to an address with 'data' in the TO field.</p>"
+    )
 
-   #  sendMail(msg)
+    sendMail(msg)
 
     #
     # Send plain text email
     #
-   #  msg = makeTextMessage(
-   #      "Plain Text Email",
-   #      datetime.datetime.now(),
-   #      DATE_FORMAT_1,
-   #      "This is a plain text email.\n\nSincerely,\nAdam Presley"
-   #  )
+    msg = makeTextMessage(
+        "Plain Text Email",
+        datetime.datetime.now(),
+        DATE_FORMAT_1,
+        "This is a plain text email.\n\nSincerely,\nAdam Presley"
+    )
 
-   #  sendMail(msg)
+    sendMail(msg)
 
     #
     # Send text+attachment
@@ -165,112 +166,119 @@ try:
     #
     # Send html+attachment
     #
-    # msg = makeMultipartMessage(
-    # 	"HTML + Attachment Email",
-    # 	datetime.datetime.now(),
-    # 	DATE_FORMAT_1,
-    # 	"This is an HTML email with an attachment. It's got logs of >great text< & special characters.",
-    # 	"<p>This is a <strong>HTML</strong> email with an attachment. It's got lots of >great text< & special` characters.</p>"
-    # )
+    msg = makeMultipartMessage(
+        "HTML + Attachment Email",
+        datetime.datetime.now(),
+        DATE_FORMAT_1,
+        "This is an HTML email with an attachment. It's got logs of >great text< & special characters.",
+        "<p>This is a <strong>HTML</strong> email with an attachment. It's got lots of >great text< & special` characters.</p>"
+    )
 
-    # msg = addAttachment(msg, "../assets/MailSlurperLogo.png", "image/png")
-    # msg = addAttachment(msg, "../assets/MailSlurperLogo.png", "image/png")
+    msg = addAttachment(msg, "../assets/MailSlurperLogo.png", "image/png")
+    msg = addAttachment(msg, "../assets/MailSlurperLogo.png", "image/png")
 
-    # sendMail(msg)
+    sendMail(msg)
 
     #
     # Send html+CSV attachment
     #
-    # msg = makeMultipartMessage(
-    # 	"HTML + CSV Attachment Email",
-    # 	datetime.datetime.now(),
-    # 	DATE_FORMAT_1,
-    # 	"This is an HTML email with a CSV attachment.",
-    # 	"<p>This is a <strong>HTML</strong> email with a CSV attachment.</p>"
-    # )
+    msg = makeMultipartMessage(
+        "HTML + CSV Attachment Email",
+        datetime.datetime.now(),
+        DATE_FORMAT_1,
+        "This is an HTML email with a CSV attachment.",
+        "<p>This is a <strong>HTML</strong> email with a CSV attachment.</p>"
+    )
 
-    # msg = addAttachment(msg, "../assets/testcsv.csv", "application/octet-stream", base64Encode=False)
-    # sendMail(msg)
+    msg = addAttachment(msg, "../assets/testcsv.csv",
+                        "application/octet-stream", base64Encode=False)
+    sendMail(msg)
 
     #
     # Send html with XSS
     #
-    # msg = makeMultipartMessage(
-    # 	"HTML Email with XSS",
-    # 	datetime.datetime.now(),
-    # 	DATE_FORMAT_1,
-    # 	"",
-    # 	"<p>This is a <strong>HTML</strong> email with XSS stuff</p><script>alert('gotcha!');</script>"
-    # )
+    msg = makeMultipartMessage(
+        "HTML Email with XSS",
+        datetime.datetime.now(),
+        DATE_FORMAT_1,
+        "",
+        "<p>This is a <strong>HTML</strong> email with XSS stuff</p><script>alert('gotcha!');</script>"
+    )
 
-    # sendMail(msg)
+    sendMail(msg)
 
     #
     # Send html+JSON attachment
     #
-    # msg = makeMultipartMessage(
-    # 	"HTML + JSON Attachment Email",
-    # 	datetime.datetime.now(),
-    # 	DATE_FORMAT_1,
-    # 	"This is an HTML email with a JSON attachment.",
-    # 	"<p>This is a <strong>HTML</strong> email with a CSV attachment.</p>"
-    # )
+    msg = makeMultipartMessage(
+        "HTML + JSON Attachment Email",
+        datetime.datetime.now(),
+        DATE_FORMAT_1,
+        "This is an HTML email with a JSON attachment.",
+        "<p>This is a <strong>HTML</strong> email with a CSV attachment.</p>"
+    )
 
-    # msg = addAttachment(msg, "../cmd/mailslurper/config.json", "application/json")
-    # sendMail(msg)
+    msg = addAttachment(
+        msg, "../cmd/mailslurper/config.json", "application/json")
+    sendMail(msg)
 
     #
     # Send HTML with various date formats
     #
-    # msg = makeMultipartMessage(
-    # 	"HTML Email with Date Format 2",
-    # 	datetime.datetime.now(),
-    # 	DATE_FORMAT_2,
-    # 	"",
-    # 	"<p>This is an email where the date in the header is formatted with {0}</p>".format(DATE_FORMAT_2)
-    # )
+    msg = makeMultipartMessage(
+        "HTML Email with Date Format 2",
+        datetime.datetime.now(),
+        DATE_FORMAT_2,
+        "",
+        "<p>This is an email where the date in the header is formatted with {0}</p>".format(
+            DATE_FORMAT_2)
+    )
 
-    # sendMail(msg)
+    sendMail(msg)
 
-    # msg = makeMultipartMessage(
-    # 	"HTML Email with Date Format 3",
-    # 	datetime.datetime.now(),
-    # 	DATE_FORMAT_3,
-    # 	"",
-    # 	"<p>This is an email where the date in the header is formatted with {0}</p>".format(DATE_FORMAT_3)
-    # )
+    msg = makeMultipartMessage(
+        "HTML Email with Date Format 3",
+        datetime.datetime.now(),
+        DATE_FORMAT_3,
+        "",
+        "<p>This is an email where the date in the header is formatted with {0}</p>".format(
+            DATE_FORMAT_3)
+    )
 
-    # sendMail(msg)
+    sendMail(msg)
 
-    # msg = makeMultipartMessage(
-    # 	"HTML Email with Date Format 4",
-    # 	datetime.datetime.now(),
-    # 	DATE_FORMAT_4,
-    # 	"",
-    # 	"<p>This is an email where the date in the header is formatted with {0}</p>".format(DATE_FORMAT_4)
-    # )
+    msg = makeMultipartMessage(
+        "HTML Email with Date Format 4",
+        datetime.datetime.now(),
+        DATE_FORMAT_4,
+        "",
+        "<p>This is an email where the date in the header is formatted with {0}</p>".format(
+            DATE_FORMAT_4)
+    )
 
-    # sendMail(msg)
+    sendMail(msg)
 
-    # msg = makeMultipartMessage(
-    # 	"HTML Email with Date Format 5",
-    # 	datetime.datetime.now(),
-    # 	DATE_FORMAT_5,
-    # 	"",
-    # 	"<p>This is an email where the date in the header is formatted with {0}</p>".format(DATE_FORMAT_5)
-    # )
+    msg = makeMultipartMessage(
+        "HTML Email with Date Format 5",
+        datetime.datetime.now(),
+        DATE_FORMAT_5,
+        "",
+        "<p>This is an email where the date in the header is formatted with {0}</p>".format(
+            DATE_FORMAT_5)
+    )
 
-    # sendMail(msg)
+    sendMail(msg)
 
-    # msg = makeMultipartMessage(
-    # 	"HTML Email with Date Format 6",
-    # 	datetime.datetime.now(),
-    # 	DATE_FORMAT_6,
-    # 	"",
-    # 	"<p>This is an email where the date in the header is formatted with {0}</p>".format(DATE_FORMAT_6)
-    # )
+    msg = makeMultipartMessage(
+        "HTML Email with Date Format 6",
+        datetime.datetime.now(),
+        DATE_FORMAT_6,
+        "",
+        "<p>This is an email where the date in the header is formatted with {0}</p>".format(
+            DATE_FORMAT_6)
+    )
 
-    # sendMail(msg)
+    sendMail(msg)
 
 except Exception as e:
     print("An error occurred while trying to connect and send the email: {0}".format(

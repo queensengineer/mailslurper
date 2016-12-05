@@ -191,7 +191,7 @@ func (messagePart *SMTPMessagePart) ParseMessages(body string, boundary string) 
 			newMessage.Message.Header = messagePart.convertPartHeadersToMap(part.Header)
 			newMessage.Message.Body = strings.NewReader(innerBody)
 
-			//newMessage.ParseMessages(innerBody, boundary)
+			newMessage.ParseMessages(innerBody, boundary)
 			messagePart.MessageParts = append(messagePart.MessageParts, newMessage)
 
 		default:
