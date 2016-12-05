@@ -5,15 +5,17 @@
 package mailslurper
 
 import (
-	"errors"
+	"bufio"
 	"fmt"
 	"net"
 	"net/mail"
+	"net/textproto"
 	"strings"
 	"time"
 
 	"github.com/adampresley/webframework/logging2"
 	"github.com/adampresley/webframework/sanitizer"
+	"github.com/pkg/errors"
 )
 
 /*
@@ -42,45 +44,29 @@ the data and potentially respond to the client to continue SMTP negotiations.
 */
 func (smtpWorker *SMTPWorker) ExecuteCommand(command SMTPCommand, streamInput string) error {
 	var err error
-
-	var headers MailHeader
-	var body MailBody
-
 	streamInput = strings.TrimSpace(streamInput)
 
 	switch command {
 	case HELO:
-		err = smtpWorker.Process_HELO(streamInput)
+		err = smtpWorker.ProcessHELO(streamInput)
 
 	case MAIL:
-		if err = smtpWorker.Process_MAIL(streamInput); err != nil {
+		if err = smtpWorker.ProcessMAIL(streamInput); err != nil {
 			smtpWorker.logger.Errorf("Problem processing MAIL FROM: %s", err.Error())
 		} else {
 			smtpWorker.logger.Infof("Mail from %s", smtpWorker.Mail.FromAddress)
 		}
 
 	case RCPT:
-		if err = smtpWorker.Process_RCPT(streamInput); err != nil {
+		if err = smtpWorker.ProcessRCPT(streamInput); err != nil {
 			smtpWorker.logger.Errorf("Problem processing RCPT TO: %s", err.Error())
 		}
 
 	case DATA:
-		headers, body, err = smtpWorker.Process_DATA(streamInput)
-		if err != nil {
+		if err = smtpWorker.ProcessDATA(streamInput); err != nil {
 			smtpWorker.logger.Errorf("Problem calling Process_DATA: %s", err.Error())
 		} else {
-			if len(strings.TrimSpace(body.HTMLBody)) <= 0 {
-				smtpWorker.Mail.Body = smtpWorker.XSSService.SanitizeString(body.TextBody)
-			} else {
-				smtpWorker.Mail.Body = smtpWorker.XSSService.SanitizeString(body.HTMLBody)
-			}
-
-			smtpWorker.Mail.Subject = smtpWorker.XSSService.SanitizeString(headers.Subject)
-			smtpWorker.Mail.DateSent = headers.Date
-			smtpWorker.Mail.XMailer = smtpWorker.XSSService.SanitizeString(headers.XMailer)
-			smtpWorker.Mail.ContentType = smtpWorker.XSSService.SanitizeString(headers.ContentType)
-			smtpWorker.Mail.Boundary = headers.Boundary
-			smtpWorker.Mail.Attachments = body.Attachments
+			smtpWorker.Mail.Body = smtpWorker.XSSService.SanitizeString(smtpWorker.Mail.Body)
 		}
 
 	default:
@@ -236,7 +222,7 @@ func (smtpWorker *SMTPWorker) Prepare(
 }
 
 /*
-Process_DATA processes the DATA command (constant DATA). When a client sends the DATA
+ProcessDATA processes the DATA command (constant DATA). When a client sends the DATA
 command there are three parts to the transmission content. Before this data
 can be processed this function will tell the client how to terminate the DATA block.
 We are asking clients to terminate with "\r\n.\r\n".
@@ -255,48 +241,64 @@ This function will return the following items.
 	2. Body breakdown (MailBody)
 	3. error structure
 */
-func (smtpWorker *SMTPWorker) Process_DATA(streamInput string) (MailHeader, MailBody, error) {
+func (smtpWorker *SMTPWorker) ProcessDATA(streamInput string) error {
 	var err error
-
-	header := MailHeader{logger: smtpWorker.logger}
-	body := MailBody{logger: smtpWorker.logger}
+	var initialHeaders textproto.MIMEHeader
 
 	commandCheck := strings.Index(strings.ToLower(streamInput), "data")
 	if commandCheck < 0 {
-		return header, body, errors.New("Invalid command for DATA")
+		return errors.New("Invalid command for DATA")
 	}
 
 	smtpWorker.Writer.SendDataResponse()
-	entireMailContents := smtpWorker.Reader.ReadDataBlock()
 
-	/*
-	 * Parse the header content
-	 */
-	if err = header.Parse(entireMailContents); err != nil {
-		smtpWorker.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
-		return header, body, err
+	entireMailContents := smtpWorker.Reader.ReadDataBlock()
+	headerReader := textproto.NewReader(bufio.NewReader(strings.NewReader(entireMailContents)))
+
+	if initialHeaders, err = headerReader.ReadMIMEHeader(); err != nil {
+		return errors.Wrapf(err, "Unable to read MIME header for data block")
 	}
 
 	/*
-		 * Parse the body. Send the
-		if err = body.Parse(entireMailContents, header.Boundary); err != nil {
-			smtpWorker.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
-			return header, body, err
-		}
-	*/
+	 * This is a simple text-based email
+	 */
+	if strings.Contains(initialHeaders.Get("Content-Type"), "text/plain") {
+		smtpWorker.processTextMail(initialHeaders, entireMailContents)
+		smtpWorker.Writer.SendOkResponse()
+		return nil
+	}
 
+	/*
+	 * This is a simple HTML email
+	 */
+	if strings.Contains(initialHeaders.Get("Content-Type"), "text/html") {
+		smtpWorker.processHTMLMail(initialHeaders, entireMailContents)
+		smtpWorker.Writer.SendOkResponse()
+		return nil
+	}
+
+	/*
+	 * Nothing simple here. We have some type of multipart email
+	 */
 	if err = smtpWorker.Mail.Message.BuildMessages(entireMailContents); err != nil {
 		smtpWorker.logger.Errorf("Problem parsing message contents: %s", err.Error())
+		smtpWorker.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
+		return errors.Wrap(err, "Problem parsing message contents")
 	}
+
+	smtpWorker.Mail.Subject = smtpWorker.Mail.Message.GetHeader("Subject")
+	smtpWorker.Mail.DateSent = ParseDateTime(smtpWorker.Mail.Message.GetHeader("Date"), smtpWorker.logger)
+	smtpWorker.Mail.ContentType = smtpWorker.Mail.Message.GetHeader("Content-Type")
 
 	if len(smtpWorker.Mail.Message.MessageParts) > 0 {
-		smtpWorker.recordMessagePart(smtpWorker.Mail.Message.MessageParts[0])
+		for _, m := range smtpWorker.Mail.Message.MessageParts {
+			smtpWorker.recordMessagePart(m)
+		}
 	} else {
 		smtpWorker.logger.Errorf("MessagePart has no parts!")
+		smtpWorker.Writer.SendResponse(SMTP_ERROR_TRANSACTION_FAILED)
+		return errors.New("Message part has no parts!")
 	}
-
-	body.HTMLBody = smtpWorker.Mail.HTMLBody
-	body.TextBody = smtpWorker.Mail.TextBody
 
 	if smtpWorker.Mail.HTMLBody != "" {
 		smtpWorker.Mail.Body = smtpWorker.Mail.HTMLBody
@@ -305,21 +307,64 @@ func (smtpWorker *SMTPWorker) Process_DATA(streamInput string) (MailHeader, Mail
 	}
 
 	smtpWorker.Writer.SendOkResponse()
-	return header, body, nil
+	return nil
+}
+
+func (smtpWorker *SMTPWorker) processTextMail(headers textproto.MIMEHeader, contents string) error {
+	var err error
+
+	smtpWorker.Mail.Subject = headers.Get("Subject")
+	smtpWorker.Mail.DateSent = ParseDateTime(headers.Get("Date"), smtpWorker.logger)
+	smtpWorker.Mail.ContentType = headers.Get("Content-Type")
+	smtpWorker.Mail.TextBody, err = smtpWorker.getBodyContent(contents)
+	smtpWorker.Mail.Body = smtpWorker.Mail.TextBody
+
+	return err
+}
+
+func (smtpWorker *SMTPWorker) processHTMLMail(headers textproto.MIMEHeader, contents string) error {
+	var err error
+
+	smtpWorker.Mail.Subject = headers.Get("Subject")
+	smtpWorker.Mail.DateSent = ParseDateTime(headers.Get("Date"), smtpWorker.logger)
+	smtpWorker.Mail.ContentType = headers.Get("Content-Type")
+	smtpWorker.Mail.HTMLBody, err = smtpWorker.getBodyContent(contents)
+	smtpWorker.Mail.Body = smtpWorker.Mail.HTMLBody
+
+	return err
+}
+
+func (smtpWorker *SMTPWorker) getBodyContent(contents string) (string, error) {
+	/*
+	 * Split the DATA content by CRLF CRLF. The first item will be the data
+	 * headers. Everything past that is body/message.
+	 */
+	headerBodySplit := strings.Split(contents, "\r\n\r\n")
+	if len(headerBodySplit) < 2 {
+		return "", errors.New("Expected DATA block to contain a header section and a body section")
+	}
+
+	return strings.Join(headerBodySplit[1:], "\r\n\r\n"), nil
 }
 
 func (smtpWorker *SMTPWorker) recordMessagePart(message ISMTPMessagePart) error {
 	if smtpWorker.isMIMEType(message, "text/plain") && smtpWorker.Mail.TextBody == "" && !smtpWorker.messagePartIsAttachment(message) {
 		smtpWorker.Mail.TextBody = message.GetBody()
+		smtpWorker.logger.Debugf("We have a text body: %s", smtpWorker.Mail.TextBody)
 	} else {
 		if smtpWorker.isMIMEType(message, "text/html") && smtpWorker.Mail.HTMLBody == "" && !smtpWorker.messagePartIsAttachment(message) {
 			smtpWorker.Mail.HTMLBody = message.GetBody()
+			smtpWorker.logger.Debugf("We have an HTML body: %s", smtpWorker.Mail.HTMLBody)
 		} else {
+			smtpWorker.logger.Debugf("We have a multipart with %d messages", len(message.GetMessageParts()))
+
 			if smtpWorker.isMIMEType(message, "multipart") {
-				for _, m := range message.GetMessageParts() {
+				for index, m := range message.GetMessageParts() {
+					smtpWorker.logger.Debugf("Message #%d", index)
 					smtpWorker.recordMessagePart(m)
 				}
 			} else {
+				smtpWorker.logger.Debugf("We have an attachment")
 				smtpWorker.addAttachment(message)
 			}
 		}
@@ -359,11 +404,11 @@ func (smtpWorker *SMTPWorker) addAttachment(messagePart ISMTPMessagePart) error 
 }
 
 /*
-Process_HELO processes the HELO and EHLO SMTP commands. This command
+ProcessHELO processes the HELO and EHLO SMTP commands. This command
 responds to clients with a 250 greeting code and returns success
 or false and an error message (if any).
 */
-func (smtpWorker *SMTPWorker) Process_HELO(streamInput string) error {
+func (smtpWorker *SMTPWorker) ProcessHELO(streamInput string) error {
 	lowercaseStreamInput := strings.ToLower(streamInput)
 
 	commandCheck := (strings.Index(lowercaseStreamInput, "helo") + 1) + (strings.Index(lowercaseStreamInput, "ehlo") + 1)
@@ -380,43 +425,11 @@ func (smtpWorker *SMTPWorker) Process_HELO(streamInput string) error {
 }
 
 /*
-Process_MAIL processes the MAIL FROM command (constant MAIL). This command
+ProcessMAIL processes the MAIL FROM command (constant MAIL). This command
 will respond to clients with 250 Ok response and returns an error
 that may have occurred as well as the parsed FROM.
 */
-func (smtpWorker *SMTPWorker) Process_MAIL(streamInput string) error {
-	var err error
-
-	if err = smtpWorker.ProcessFrom(streamInput); err != nil {
-		return err
-	}
-
-	smtpWorker.Writer.SendOkResponse()
-	return nil
-}
-
-/*
-Process_RCPT processes the RCPT TO command (constant RCPT). This command
-will respond to clients with a 250 Ok response and returns an error structre
-and a string containing the recipients address. Note that a client
-can send one or more RCPT TO commands.
-*/
-func (smtpWorker *SMTPWorker) Process_RCPT(streamInput string) error {
-	var err error
-
-	if err = smtpWorker.ProcessRecipient(streamInput); err != nil {
-		return err
-	}
-
-	smtpWorker.Writer.SendOkResponse()
-	return nil
-}
-
-/*
-ProcessFrom takes the input stream and stores the sender email address. If there
-is an error it is returned.
-*/
-func (smtpWorker *SMTPWorker) ProcessFrom(streamInput string) error {
+func (smtpWorker *SMTPWorker) ProcessMAIL(streamInput string) error {
 	var err error
 	var from string
 	var fromComponents *mail.Address
@@ -440,14 +453,17 @@ func (smtpWorker *SMTPWorker) ProcessFrom(streamInput string) error {
 	}
 
 	smtpWorker.Mail.FromAddress = from
+	smtpWorker.Writer.SendOkResponse()
 	return nil
 }
 
 /*
-ProcessRecipient takes the input stream and stores the intended recipient(s). If there
-is an error it is returned.
+ProcessRCPT processes the RCPT TO command (constant RCPT). This command
+will respond to clients with a 250 Ok response and returns an error structre
+and a string containing the recipients address. Note that a client
+can send one or more RCPT TO commands.
 */
-func (smtpWorker *SMTPWorker) ProcessRecipient(streamInput string) error {
+func (smtpWorker *SMTPWorker) ProcessRCPT(streamInput string) error {
 	var err error
 	var to string
 	var toComponents *mail.Address
@@ -471,6 +487,7 @@ func (smtpWorker *SMTPWorker) ProcessRecipient(streamInput string) error {
 	}
 
 	smtpWorker.Mail.ToAddresses = append(smtpWorker.Mail.ToAddresses, to)
+	smtpWorker.Writer.SendOkResponse()
 	return nil
 }
 
@@ -484,59 +501,56 @@ is received. This will start the process by responding to the client,
 start processing commands, and finally close the connection.
 */
 func (smtpWorker *SMTPWorker) Work() {
-	go func() {
-		var streamInput string
-		var command SMTPCommand
-		var err error
+	var streamInput string
+	var command SMTPCommand
+	var err error
 
-		smtpWorker.InitializeMailItem()
-		smtpWorker.Writer.SayHello()
+	smtpWorker.InitializeMailItem()
+	smtpWorker.Writer.SayHello()
 
-		/*
-		 * Read from the connection until we receive a QUIT command
-		 * or some critical error occurs and we force quit.
-		 */
-		startTime := time.Now()
+	/*
+	 * Read from the connection until we receive a QUIT command
+	 * or some critical error occurs and we force quit.
+	 */
+	startTime := time.Now()
 
-		for smtpWorker.State != SMTP_WORKER_DONE && smtpWorker.State != SMTP_WORKER_ERROR {
-			streamInput = smtpWorker.Reader.Read()
-			command, err = GetCommandFromString(streamInput)
+	for smtpWorker.State != SMTP_WORKER_DONE && smtpWorker.State != SMTP_WORKER_ERROR {
+		streamInput = smtpWorker.Reader.Read()
+		command, err = GetCommandFromString(streamInput)
 
-			if err != nil {
-				smtpWorker.logger.Errorf("Problem finding command from input %s: %s", streamInput, err.Error())
+		if err != nil {
+			smtpWorker.logger.Errorf("Problem finding command from input %s: %s", streamInput, err.Error())
+			smtpWorker.State = SMTP_WORKER_ERROR
+			continue
+		}
+
+		if command == QUIT {
+			smtpWorker.State = SMTP_WORKER_DONE
+			smtpWorker.logger.Infof("Closing connection")
+		} else {
+			if err = smtpWorker.ExecuteCommand(command, streamInput); err != nil {
 				smtpWorker.State = SMTP_WORKER_ERROR
-				continue
-			}
-
-			if command == QUIT {
-				smtpWorker.State = SMTP_WORKER_DONE
-				smtpWorker.logger.Infof("Closing connection")
-			} else {
-				err = smtpWorker.ExecuteCommand(command, streamInput)
-				if err != nil {
-					smtpWorker.State = SMTP_WORKER_ERROR
-					smtpWorker.logger.Errorf("Problem executing command %s", command.String())
-					continue
-				}
-			}
-
-			if smtpWorker.TimeoutHasExpired(startTime) {
-				smtpWorker.logger.Infof("Connection timeout. Terminating client connection")
-				smtpWorker.State = SMTP_WORKER_ERROR
+				smtpWorker.logger.Errorf("Problem executing command %s", command.String())
 				continue
 			}
 		}
 
-		smtpWorker.Writer.SayGoodbye()
-		smtpWorker.Connection.Close()
-
-		if smtpWorker.State != SMTP_WORKER_ERROR {
-			smtpWorker.Receiver <- smtpWorker.Mail
+		if smtpWorker.TimeoutHasExpired(startTime) {
+			smtpWorker.logger.Infof("Connection timeout. Terminating client connection")
+			smtpWorker.State = SMTP_WORKER_ERROR
+			continue
 		}
+	}
 
-		smtpWorker.State = SMTP_WORKER_IDLE
-		smtpWorker.rejoinWorkerQueue()
-	}()
+	smtpWorker.Writer.SayGoodbye()
+	smtpWorker.Connection.Close()
+
+	if smtpWorker.State != SMTP_WORKER_ERROR {
+		smtpWorker.Receiver <- smtpWorker.Mail
+	}
+
+	smtpWorker.State = SMTP_WORKER_IDLE
+	smtpWorker.rejoinWorkerQueue()
 }
 
 /*

@@ -1,6 +1,7 @@
 package mailslurper
 
 import (
+	"bufio"
 	"io"
 	"io/ioutil"
 	"mime"
@@ -23,6 +24,7 @@ type SMTPMessagePart struct {
 	Message      *mail.Message
 	MessageParts []ISMTPMessagePart
 
+	body   string
 	logger logging2.ILogger
 }
 
@@ -34,6 +36,7 @@ func NewSMTPMessagePart(logger logging2.ILogger) *SMTPMessagePart {
 		Message:      &mail.Message{},
 		MessageParts: make([]ISMTPMessagePart, 0),
 
+		body:   "",
 		logger: logger,
 	}
 }
@@ -49,8 +52,8 @@ func (messagePart *SMTPMessagePart) AddBody(body string) error {
 /*
 AddHeaders takes a header set and adds it to this message part.
 */
-func (messagePart *SMTPMessagePart) AddHeaders(headerSet ISet) error {
-	messagePart.Message.Header = headerSet.ToMap()
+func (messagePart *SMTPMessagePart) AddHeaders(headers textproto.MIMEHeader) error {
+	messagePart.Message.Header = mail.Header(headers)
 	return nil
 }
 
@@ -61,18 +64,17 @@ attempts to parse the parts.
 */
 func (messagePart *SMTPMessagePart) BuildMessages(body string) error {
 	var err error
-	var headerSet ISet
 	var isMultipart bool
 	var boundary string
+	var headers textproto.MIMEHeader
 
-	headerBodySplit := strings.Split(body, "\r\n\r\n")
-	if headerSet, err = NewHeaderSet(headerBodySplit[0]); err != nil {
-		return errors.Wrapf(err, "Error while building message part")
+	headerReader := textproto.NewReader(bufio.NewReader(strings.NewReader(body)))
+
+	if headers, err = headerReader.ReadMIMEHeader(); err != nil {
+		return errors.Wrap(err, "Problem reading headers")
 	}
 
-	if err = messagePart.AddHeaders(headerSet); err != nil {
-		return errors.Wrapf(err, "Error adding headers to message part")
-	}
+	messagePart.AddHeaders(headers)
 
 	/*
 	 * If this is not a multipart message, bail early. We've got
@@ -83,6 +85,8 @@ func (messagePart *SMTPMessagePart) BuildMessages(body string) error {
 	}
 
 	if !isMultipart {
+		messagePart.logger.Debugf("Body of message: %s", body)
+
 		if err = messagePart.AddBody(body); err != nil {
 			return errors.Wrapf(err, "Error adding body to message part")
 		}
@@ -94,6 +98,7 @@ func (messagePart *SMTPMessagePart) BuildMessages(body string) error {
 		return errors.Wrapf(err, "Error getting boundary for message part")
 	}
 
+	messagePart.logger.Debugf("Body of message: %s", body)
 	if err = messagePart.AddBody(body); err != nil {
 		return errors.Wrapf(err, "Error adding body to message part")
 	}
@@ -108,12 +113,16 @@ func (messagePart *SMTPMessagePart) GetBody() string {
 	var err error
 	var bytes []byte
 
-	if bytes, err = ioutil.ReadAll(messagePart.Message.Body); err != nil {
-		messagePart.logger.Errorf("Problem reading message body: %s", err.Error())
-		return ""
+	if messagePart.body == "" {
+		if bytes, err = ioutil.ReadAll(messagePart.Message.Body); err != nil {
+			messagePart.logger.Errorf("Problem reading message body: %s", err.Error())
+			return ""
+		}
+
+		messagePart.body = string(bytes)
 	}
 
-	return string(bytes)
+	return messagePart.body
 }
 
 /*
@@ -171,19 +180,18 @@ func (messagePart *SMTPMessagePart) ParseMessages(body string, boundary string) 
 				return errors.Wrapf(err, "Error reading body for content type '%s'", messagePart.Message.Header.Get("Content-Type"))
 			}
 
-			messagePart.logger.Debugf("Building new message part: %s", string(bodyPart))
+			innerBody := string(bodyPart)
+			messagePart.logger.Debugf("Building new message part: %v", part.Header)
+
 			if boundary, err = messagePart.GetBoundaryFromHeaderString(part.Header.Get("Content-Type")); err != nil {
 				return errors.Wrapf(err, "Error getting boundary marker")
 			}
-
-			messagePart.logger.Debugf("New boundary for part: %s", boundary)
-			innerBody := string(bodyPart)
 
 			newMessage := NewSMTPMessagePart(messagePart.logger)
 			newMessage.Message.Header = messagePart.convertPartHeadersToMap(part.Header)
 			newMessage.Message.Body = strings.NewReader(innerBody)
 
-			newMessage.ParseMessages(innerBody, boundary)
+			//newMessage.ParseMessages(innerBody, boundary)
 			messagePart.MessageParts = append(messagePart.MessageParts, newMessage)
 
 		default:

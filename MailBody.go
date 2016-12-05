@@ -23,6 +23,15 @@ type MailBody struct {
 }
 
 /*
+NewEmptyMailBody creates an empty MailBody
+*/
+func NewEmptyMailBody(logger logging2.ILogger) *MailBody {
+	return &MailBody{
+		logger: logger,
+	}
+}
+
+/*
 NewMailBody creates a new MailBody object
 */
 func NewMailBody(textBody, htmlBody string, attachments []*Attachment, logger logging2.ILogger) *MailBody {
@@ -36,6 +45,22 @@ func NewMailBody(textBody, htmlBody string, attachments []*Attachment, logger lo
 }
 
 /*
+GetBodyContent returns just the body content following the mail headers.
+*/
+func (mailBody *MailBody) GetBodyContent(contents string) (string, error) {
+	/*
+	 * Split the DATA content by CRLF CRLF. The first item will be the data
+	 * headers. Everything past that is body/message.
+	 */
+	headerBodySplit := strings.Split(contents, "\r\n\r\n")
+	if len(headerBodySplit) < 2 {
+		return "", fmt.Errorf("Expected DATA block to contain a header section and a body section")
+	}
+
+	return strings.Join(headerBodySplit[1:], "\r\n\r\n"), nil
+}
+
+/*
 Parses a mail's DATA section. This will attempt to figure out
 what this mail contains. At the simplest level it will contain
 a text message. A more complex example would be a multipart message
@@ -43,18 +68,14 @@ with mixed text and HTML. It will also parse any attachments and
 retrieve their contents into an attachments array.
 */
 func (mailBody *MailBody) Parse(contents string, boundary string) error {
+	var err error
+
 	mailBody.logger.Debugf("Full body of message == %s", contents)
 
-	/*
-	 * Split the DATA content by CRLF CRLF. The first item will be the data
-	 * headers. Everything past that is body/message.
-	 */
-	headerBodySplit := strings.Split(contents, "\r\n\r\n")
-	if len(headerBodySplit) < 2 {
+	if contents, err = mailBody.GetBodyContent(contents); err != nil {
 		return fmt.Errorf("Expected DATA block to contain a header section and a body section")
 	}
 
-	contents = strings.Join(headerBodySplit[1:], "\r\n\r\n")
 	mailBody.Attachments = make([]*Attachment, 0)
 
 	/*

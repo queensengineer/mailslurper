@@ -4,6 +4,8 @@
 
 package mailslurper
 
+import "net/textproto"
+
 /*
 An ISMTPMessagePart represents a single message/content from a DATA transmission
 from an SMTP client. This contains the headers and body content. It also contains
@@ -12,7 +14,7 @@ the recursive tree-like nature of the MIME protocol.
 */
 type ISMTPMessagePart interface {
 	AddBody(body string) error
-	AddHeaders(headerSet ISet) error
+	AddHeaders(headerSet textproto.MIMEHeader) error
 	BuildMessages(body string) error
 	ContentIsMultipart() (bool, error)
 	GetBody() string

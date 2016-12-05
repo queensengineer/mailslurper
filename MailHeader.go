@@ -27,6 +27,15 @@ type MailHeader struct {
 }
 
 /*
+NewEmptyMailHeader creates an empty MailHeader object
+*/
+func NewEmptyMailHeader(logger logging2.ILogger) *MailHeader {
+	return &MailHeader{
+		logger: logger,
+	}
+}
+
+/*
 NewMailHeader creates a new MailHeader object
 */
 func NewMailHeader(contentType, boundary, mimeVersion, subject, date, xMailer string, logger logging2.ILogger) *MailHeader {

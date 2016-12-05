@@ -96,6 +96,6 @@ func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemR
 			continue
 		}
 
-		worker.Work()
+		go worker.Work()
 	}
 }
