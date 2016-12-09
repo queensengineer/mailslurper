@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/mailslurper/mailslurper"
 
@@ -78,3 +79,8 @@ var _ = AfterSuite(func() {
 		//os.Remove("./temp.db")
 	}
 })
+
+func DeleteAllMail() {
+	startDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02")
+	database.DeleteMailsAfterDate(startDate)
+}
