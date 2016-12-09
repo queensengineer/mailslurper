@@ -1,7 +1,6 @@
 package mailslurper_test
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"sync"
@@ -33,7 +32,7 @@ var _ = BeforeSuite(func() {
 	killChannel = make(chan bool, 1)
 	wg = &sync.WaitGroup{}
 
-	logger := logging2.LogFactory(logging2.LOG_FORMAT_SIMPLE, "MailSlurper", logging2.INFO)
+	logger := logging2.LogFactory(logging2.LOG_FORMAT_SIMPLE, "MailSlurper", logging2.ERROR)
 	logger.EnableColors()
 
 	databaseConnection := &mailslurper.ConnectionInformation{
@@ -67,20 +66,16 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	var err error
-
 	killChannel <- true
 	wg.Wait()
 	database.Disconnect()
 	mailslurper.CloseSMTPServerListener(smtpServer)
-
-	if _, err = os.Stat("./temp.db"); err == nil {
-		fmt.Printf("Kill db here...")
-		//os.Remove("./temp.db")
-	}
 })
 
 func DeleteAllMail() {
-	startDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02")
-	database.DeleteMailsAfterDate(startDate)
+	database.DeleteMailsAfterDate("")
+}
+
+func Pause() {
+	time.Sleep(100 * time.Millisecond)
 }
