@@ -4,11 +4,13 @@
 
 package mailslurper
 
+import "sync"
+
 /*
 An IMailItemReceiver defines an interface where the implementing object
 can take a MailItem and do something with it, like write to a database,
 etc...
 */
 type IMailItemReceiver interface {
-	Receive(mailItem *MailItem) error
+	Receive(mailItem *MailItem, wg *sync.WaitGroup) error
 }

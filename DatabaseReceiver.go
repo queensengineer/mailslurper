@@ -4,7 +4,11 @@
 
 package mailslurper
 
-import "github.com/adampresley/webframework/logging2"
+import (
+	"sync"
+
+	"github.com/adampresley/webframework/logging2"
+)
 
 /*
 A DatabaseReceiver takes a MailItem and writes it to a database
@@ -27,9 +31,11 @@ func NewDatabaseReceiver(database IStorage, logger logging2.ILogger) DatabaseRec
 /*
 Receive takes a MailItem and writes it to the provided storage engine
 */
-func (receiver DatabaseReceiver) Receive(mailItem *MailItem) error {
+func (receiver DatabaseReceiver) Receive(mailItem *MailItem, wg *sync.WaitGroup) error {
 	var err error
 	var newID string
+
+	wg.Add(1)
 
 	if newID, err = receiver.database.StoreMail(mailItem); err != nil {
 		receiver.logger.Errorf("There was an error while storing your mail item: %s", err.Error())
@@ -37,5 +43,7 @@ func (receiver DatabaseReceiver) Receive(mailItem *MailItem) error {
 	}
 
 	receiver.logger.Infof("Mail item %s written", newID)
+
+	wg.Done()
 	return nil
 }

@@ -70,15 +70,16 @@ func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemR
 
 	var worker *SMTPWorker
 
+	wg.Add(2)
+
 	go func() {
 		logger.Infof("%d receiver(s) listening", len(receivers))
-		wg.Add(1)
 
 		for {
 			select {
 			case item := <-mailItemChannel:
 				for _, r := range receivers {
-					go r.Receive(&item)
+					go r.Receive(&item, wg)
 				}
 
 			case <-killReceiverChannel:
@@ -93,22 +94,27 @@ func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemR
 	 * Now start accepting connections for SMTP
 	 */
 	go func() {
-		wg.Add(1)
-
 		for {
-			connection, err := handle.Accept()
-			if err != nil {
-				logger.Errorf("Problem accepting SMTP requests - %s", err.Error())
-				panic(err)
-			}
+			select {
+			case <-killChannel:
+				break
 
-			if worker, err = serverPool.NextWorker(connection, mailItemChannel); err != nil {
-				connection.Close()
-				logger.Errorf(err.Error())
-				continue
-			}
+			default:
+				connection, err := handle.Accept()
+				if err != nil {
+					logger.Errorf("Problem accepting SMTP requests - %s", err.Error())
+					killChannel <- true
+					break
+				}
 
-			go worker.Work()
+				if worker, err = serverPool.NextWorker(connection, mailItemChannel); err != nil {
+					connection.Close()
+					logger.Errorf(err.Error())
+					continue
+				}
+
+				go worker.Work()
+			}
 		}
 	}()
 
