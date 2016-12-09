@@ -46,6 +46,17 @@ func getMailCountQuery(mailSearch *MailSearch) (string, []interface{}) {
 	return addSearchCriteria(sqlQuery, parameters, mailSearch)
 }
 
+func getDeleteAttachmentsQuery(startDate string) string {
+	where := ""
+
+	if len(startDate) > 0 {
+		where = where + " AND m.dateSent <= ? "
+	}
+
+	sqlQuery := "DELETE FROM attachment WHERE attachment.mailItemID IN (SELECT mailitem.id FROM mailitem WHERE 1=1 " + where + ")"
+	return sqlQuery
+}
+
 func getDeleteMailQuery(startDate string) string {
 	where := ""
 

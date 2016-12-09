@@ -344,7 +344,7 @@ func (storage *MSSQLStorage) GetMailCount(mailSearch *MailSearch) (int, error) {
 DeleteMailsAfterDate deletes all mails after a specified date
 */
 func (storage *MSSQLStorage) DeleteMailsAfterDate(startDate string) error {
-	sqlQuery := getDeleteMailQuery(startDate)
+	sqlQuery := ""
 	parameters := []interface{}{}
 	var err error
 
@@ -352,6 +352,12 @@ func (storage *MSSQLStorage) DeleteMailsAfterDate(startDate string) error {
 		parameters = append(parameters, startDate)
 	}
 
+	sqlQuery = getDeleteAttachmentsQuery(startDate)
+	if _, err = storage.db.Exec(sqlQuery, parameters...); err != nil {
+		return err
+	}
+
+	sqlQuery = getDeleteMailQuery(startDate)
 	_, err = storage.db.Exec(sqlQuery, parameters...)
 	return err
 }
