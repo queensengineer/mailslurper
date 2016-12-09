@@ -129,6 +129,7 @@ func (storage *SQLiteStorage) GetAttachment(mailID, attachmentID string) (Attach
 		ContentType: contentType,
 	}
 
+	result.MailID = mailID
 	result.Contents = content
 	return result, nil
 }

@@ -101,6 +101,7 @@ func (storage *MySQLStorage) GetAttachment(mailID, attachmentID string) (Attachm
 		ContentType: contentType,
 	}
 
+	result.MailID = mailID
 	result.Contents = content
 	return result, nil
 }
