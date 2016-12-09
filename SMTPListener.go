@@ -7,6 +7,7 @@ package mailslurper
 import (
 	"crypto/tls"
 	"net"
+	"sync"
 
 	"github.com/adampresley/webframework/logging2"
 )
@@ -59,16 +60,19 @@ and parser and the parser process is started. If the parsing is successful
 the MailItemStruct is added to a channel. An receivers passed in will be
 listening on that channel and may do with the mail item as they wish.
 */
-func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemReceiver, logger logging2.ILogger) {
+func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemReceiver, logger logging2.ILogger, killChannel chan bool, wg *sync.WaitGroup) {
 	/*
 	 * Setup our receivers. These guys are basically subscribers to
 	 * the MailItem channel.
 	 */
 	mailItemChannel := make(chan MailItem, 1000)
+	killReceiverChannel := make(chan bool, 1)
+
 	var worker *SMTPWorker
 
 	go func() {
 		logger.Infof("%d receiver(s) listening", len(receivers))
+		wg.Add(1)
 
 		for {
 			select {
@@ -76,6 +80,11 @@ func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemR
 				for _, r := range receivers {
 					go r.Receive(&item)
 				}
+
+			case <-killReceiverChannel:
+				logger.Debugf("Shutting down receiver channel...")
+				wg.Done()
+				break
 			}
 		}
 	}()
@@ -83,19 +92,29 @@ func Dispatch(serverPool ServerPool, handle net.Listener, receivers []IMailItemR
 	/*
 	 * Now start accepting connections for SMTP
 	 */
-	for {
-		connection, err := handle.Accept()
-		if err != nil {
-			logger.Errorf("Problem accepting SMTP requests - %s", err.Error())
-			panic(err)
-		}
+	go func() {
+		wg.Add(1)
 
-		if worker, err = serverPool.NextWorker(connection, mailItemChannel); err != nil {
-			connection.Close()
-			logger.Errorf(err.Error())
-			continue
-		}
+		for {
+			connection, err := handle.Accept()
+			if err != nil {
+				logger.Errorf("Problem accepting SMTP requests - %s", err.Error())
+				panic(err)
+			}
 
-		go worker.Work()
-	}
+			if worker, err = serverPool.NextWorker(connection, mailItemChannel); err != nil {
+				connection.Close()
+				logger.Errorf(err.Error())
+				continue
+			}
+
+			go worker.Work()
+		}
+	}()
+
+	<-killChannel
+	logger.Debugf("Received kill code..")
+	wg.Done()
+
+	killReceiverChannel <- true
 }

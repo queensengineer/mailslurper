@@ -14,6 +14,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adampresley/presleylife/www"
@@ -46,6 +47,9 @@ func main() {
 	var err error
 	flag.Parse()
 
+	killChannel := make(chan bool, 1)
+	wg := &sync.WaitGroup{}
+
 	//logger = logging2.NewJSONLogger("MailSlurper", logging2.StringToLogType("debug"))
 	logger = logging2.LogFactory(logging2.StringToLogFormat(*logFormat), "MailSlurper", logging2.StringToLogType(*logLevel))
 	logger.EnableColors()
@@ -57,6 +61,8 @@ func main() {
 	 */
 	console.ListenForSIGINT(func() {
 		logger.Infof("Shutting down")
+		killChannel <- true
+		wg.Wait()
 		os.Exit(0)
 	})
 
@@ -106,7 +112,7 @@ func main() {
 	/*
 	 * Start the SMTP dispatcher
 	 */
-	go mailslurper.Dispatch(pool, smtpServer, receivers, logger)
+	go mailslurper.Dispatch(pool, smtpServer, receivers, logger, killChannel, wg)
 
 	/*
 	 * Setup and start the HTTP listener for the application site
