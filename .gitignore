@@ -32,3 +32,4 @@ mailslurper.db
 www/assets/mailslurper/.DS_Store
 scripts/*.pem
 scripts/*.csr
+temp.db
