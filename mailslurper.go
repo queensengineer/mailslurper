@@ -76,8 +76,13 @@ func main() {
 	/*
 	 * Setup receivers (subscribers) to handle new mail items.
 	 */
-	receivers := []receiver.IMailItemReceiver{
-		receiver.NewDatabaseReceiver(global.Database),
+
+	receivers := []receiver.IMailItemReceiver{}
+
+	if config.DoNotStoreEmails {
+		log.Println("Not storing incoming emails as per requested configuration")
+	} else {
+		receivers = append(receivers, receiver.NewDatabaseReceiver(global.Database))
 	}
 
 	/*
